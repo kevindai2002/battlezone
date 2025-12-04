@@ -8,6 +8,8 @@ const gameState = {
         x: 0,
         z: 0,
         angle: 0,
+        turretAngle: 0, // For alternate mode: turret rotation
+        velocity: 0, // For alternate mode: car-like movement speed
         dead: false,
         deadTime: 0,
         invulnerable: false,
@@ -16,7 +18,7 @@ const gameState = {
     playerShot: null,
     enemyShots: [],
     enemies: [
-        { x: 20, z: 20, angle: 0, shootTimer: 3 }
+        { x: 20, z: 20, angle: 0, turretAngle: 0, shootTimer: 3 }
     ],
     obstacles: [
         { x: -15, z: 10, type: 'cube' },
@@ -28,6 +30,8 @@ const gameState = {
 
 // Geometry buffers
 let obstacleBuffer, enemyBuffer, groundBuffer, playerBuffer, playerRadarBuffer, enemyRadarBuffer;
+// Alternate mode tank buffers
+let tankBaseBuffer, tankTurretBuffer, tankArrowBuffer, movementArrowBuffer;
 
 // Input state
 const keys = {};
@@ -36,7 +40,13 @@ const keys = {};
 let lastTime = 0;
 
 // Alternate mode flag
-let alternateMode = false;
+let alternateMode = true; // Set to true for testing
+
+// Camera angles for alternate mode
+let cameraYaw = 0;   // Horizontal rotation (left/right)
+let cameraPitch = 0; // Vertical rotation (up/down)
+const maxPitch = Math.PI / 3; // Limit pitch to 60 degrees up/down
+const cameraRotateSpeed = 2.0; // Camera rotation speed with arrow keys
 
 // UI elements
 let countdownElement;
@@ -216,6 +226,178 @@ function createGround(size, color) {
     return { vertices, colors, count: vertices.length / 3 };
 }
 
+// Tank base: a flat rectangle (low box)
+// Front faces in positive Z direction, width spans X axis
+function createTankBase(color) {
+    const width = 1.0;   // Left-right dimension (narrower)
+    const length = 1.5;  // Front-back dimension (longer)
+    const height = 0.3;
+    
+    const vertices = [
+        // Front (positive Z)
+        -width/2, 0,  length/2,   width/2, 0,  length/2,   width/2, height,  length/2,
+        -width/2, 0,  length/2,   width/2, height,  length/2, -width/2, height,  length/2,
+        // Back (negative Z)
+        -width/2, 0, -length/2, -width/2, height, -length/2,   width/2, height, -length/2,
+        -width/2, 0, -length/2,   width/2, height, -length/2,   width/2, 0, -length/2,
+        // Top
+        -width/2, height, -length/2, -width/2, height,  length/2,   width/2, height,  length/2,
+        -width/2, height, -length/2,   width/2, height,  length/2,   width/2, height, -length/2,
+        // Bottom
+        -width/2, 0, -length/2,   width/2, 0, -length/2,   width/2, 0,  length/2,
+        -width/2, 0, -length/2,   width/2, 0,  length/2, -width/2, 0,  length/2,
+        // Right (positive X)
+         width/2, 0, -length/2,   width/2, height, -length/2,   width/2, height,  length/2,
+         width/2, 0, -length/2,   width/2, height,  length/2,   width/2, 0,  length/2,
+        // Left (negative X)
+        -width/2, 0, -length/2, -width/2, 0,  length/2, -width/2, height,  length/2,
+        -width/2, 0, -length/2, -width/2, height,  length/2, -width/2, height, -length/2
+    ];
+
+    const colors = [];
+    for (let i = 0; i < vertices.length / 3; i++) {
+        colors.push(color[0], color[1], color[2]);
+    }
+
+    return { vertices, colors, count: vertices.length / 3 };
+}
+
+// Tank turret: a smaller box on top
+function createTankTurret(color) {
+    const width = 0.6;   // Left-right dimension (narrower)
+    const length = 0.8;  // Front-back dimension (longer)
+    const height = 0.4;
+    const baseY = 0.3; // Sits on top of base
+    
+    const vertices = [
+        // Front
+        -width/2, baseY,  length/2,   width/2, baseY,  length/2,   width/2, baseY + height,  length/2,
+        -width/2, baseY,  length/2,   width/2, baseY + height,  length/2, -width/2, baseY + height,  length/2,
+        // Back
+        -width/2, baseY, -length/2, -width/2, baseY + height, -length/2,   width/2, baseY + height, -length/2,
+        -width/2, baseY, -length/2,   width/2, baseY + height, -length/2,   width/2, baseY, -length/2,
+        // Top
+        -width/2, baseY + height, -length/2, -width/2, baseY + height,  length/2,   width/2, baseY + height,  length/2,
+        -width/2, baseY + height, -length/2,   width/2, baseY + height,  length/2,   width/2, baseY + height, -length/2,
+        // Bottom
+        -width/2, baseY, -length/2,   width/2, baseY, -length/2,   width/2, baseY,  length/2,
+        -width/2, baseY, -length/2,   width/2, baseY,  length/2, -width/2, baseY,  length/2,
+        // Right
+         width/2, baseY, -length/2,   width/2, baseY + height, -length/2,   width/2, baseY + height,  length/2,
+         width/2, baseY, -length/2,   width/2, baseY + height,  length/2,   width/2, baseY,  length/2,
+        // Left
+        -width/2, baseY, -length/2, -width/2, baseY,  length/2, -width/2, baseY + height,  length/2,
+        -width/2, baseY, -length/2, -width/2, baseY + height,  length/2, -width/2, baseY + height, -length/2
+    ];
+
+    const colors = [];
+    for (let i = 0; i < vertices.length / 3; i++) {
+        colors.push(color[0], color[1], color[2]);
+    }
+
+    return { vertices, colors, count: vertices.length / 3 };
+}
+
+// Tank arrow: simple arrow pointing forward for debugging
+function createTankArrow(color) {
+    const length = 0.8;
+    const width = 0.2;
+    const height = 0.05;
+    const arrowHeadSize = 0.3;
+    const baseY = 0.35; // Sits on top of turret
+    
+    const vertices = [
+        // Arrow shaft (rectangle pointing forward in +Z direction)
+        // Front face
+        -width/2, baseY, length/2,  width/2, baseY, length/2,  width/2, baseY + height, length/2,
+        -width/2, baseY, length/2,  width/2, baseY + height, length/2, -width/2, baseY + height, length/2,
+        // Back face
+        -width/2, baseY, 0, -width/2, baseY + height, 0,  width/2, baseY + height, 0,
+        -width/2, baseY, 0,  width/2, baseY + height, 0,  width/2, baseY, 0,
+        // Top
+        -width/2, baseY + height, 0, -width/2, baseY + height, length/2,  width/2, baseY + height, length/2,
+        -width/2, baseY + height, 0,  width/2, baseY + height, length/2,  width/2, baseY + height, 0,
+        // Bottom
+        -width/2, baseY, 0,  width/2, baseY, 0,  width/2, baseY, length/2,
+        -width/2, baseY, 0,  width/2, baseY, length/2, -width/2, baseY, length/2,
+        // Right
+         width/2, baseY, 0,  width/2, baseY + height, 0,  width/2, baseY + height, length/2,
+         width/2, baseY, 0,  width/2, baseY + height, length/2,  width/2, baseY, length/2,
+        // Left
+        -width/2, baseY, 0, -width/2, baseY, length/2, -width/2, baseY + height, length/2,
+        -width/2, baseY, 0, -width/2, baseY + height, length/2, -width/2, baseY + height, 0,
+        
+        // Arrow head (triangle pointing forward)
+        // Top triangle
+        0, baseY + height, length/2 + arrowHeadSize,  -arrowHeadSize, baseY + height, length/2,  arrowHeadSize, baseY + height, length/2,
+        // Bottom triangle
+        0, baseY, length/2 + arrowHeadSize,  arrowHeadSize, baseY, length/2,  -arrowHeadSize, baseY, length/2,
+        // Left side
+        -arrowHeadSize, baseY, length/2,  -arrowHeadSize, baseY + height, length/2,  0, baseY + height, length/2 + arrowHeadSize,
+        -arrowHeadSize, baseY, length/2,  0, baseY + height, length/2 + arrowHeadSize,  0, baseY, length/2 + arrowHeadSize,
+        // Right side
+         arrowHeadSize, baseY, length/2,  0, baseY, length/2 + arrowHeadSize,  0, baseY + height, length/2 + arrowHeadSize,
+         arrowHeadSize, baseY, length/2,  0, baseY + height, length/2 + arrowHeadSize,  arrowHeadSize, baseY + height, length/2
+    ];
+
+    const colors = [];
+    for (let i = 0; i < vertices.length / 3; i++) {
+        colors.push(color[0], color[1], color[2]);
+    }
+
+    return { vertices, colors, count: vertices.length / 3 };
+}
+
+// Movement direction arrow: shows actual movement direction
+function createMovementArrow(color) {
+    const length = 1.0;
+    const width = 0.15;
+    const height = 0.03;
+    const arrowHeadSize = 0.4;
+    const baseY = 0.4; // Sits above the forward arrow
+    
+    const vertices = [
+        // Arrow shaft (rectangle pointing forward in +Z direction)
+        // Front face
+        -width/2, baseY, length/2,  width/2, baseY, length/2,  width/2, baseY + height, length/2,
+        -width/2, baseY, length/2,  width/2, baseY + height, length/2, -width/2, baseY + height, length/2,
+        // Back face
+        -width/2, baseY, 0, -width/2, baseY + height, 0,  width/2, baseY + height, 0,
+        -width/2, baseY, 0,  width/2, baseY + height, 0,  width/2, baseY, 0,
+        // Top
+        -width/2, baseY + height, 0, -width/2, baseY + height, length/2,  width/2, baseY + height, length/2,
+        -width/2, baseY + height, 0,  width/2, baseY + height, length/2,  width/2, baseY + height, 0,
+        // Bottom
+        -width/2, baseY, 0,  width/2, baseY, 0,  width/2, baseY, length/2,
+        -width/2, baseY, 0,  width/2, baseY, length/2, -width/2, baseY, length/2,
+        // Right
+         width/2, baseY, 0,  width/2, baseY + height, 0,  width/2, baseY + height, length/2,
+         width/2, baseY, 0,  width/2, baseY + height, length/2,  width/2, baseY, length/2,
+        // Left
+        -width/2, baseY, 0, -width/2, baseY, length/2, -width/2, baseY + height, length/2,
+        -width/2, baseY, 0, -width/2, baseY + height, length/2, -width/2, baseY + height, 0,
+        
+        // Arrow head (triangle pointing forward)
+        // Top triangle
+        0, baseY + height, length/2 + arrowHeadSize,  -arrowHeadSize, baseY + height, length/2,  arrowHeadSize, baseY + height, length/2,
+        // Bottom triangle
+        0, baseY, length/2 + arrowHeadSize,  arrowHeadSize, baseY, length/2,  -arrowHeadSize, baseY, length/2,
+        // Left side
+        -arrowHeadSize, baseY, length/2,  -arrowHeadSize, baseY + height, length/2,  0, baseY + height, length/2 + arrowHeadSize,
+        -arrowHeadSize, baseY, length/2,  0, baseY + height, length/2 + arrowHeadSize,  0, baseY, length/2 + arrowHeadSize,
+        // Right side
+         arrowHeadSize, baseY, length/2,  0, baseY, length/2 + arrowHeadSize,  0, baseY + height, length/2 + arrowHeadSize,
+         arrowHeadSize, baseY, length/2,  0, baseY + height, length/2 + arrowHeadSize,  arrowHeadSize, baseY + height, length/2
+    ];
+
+    const colors = [];
+    for (let i = 0; i < vertices.length / 3; i++) {
+        colors.push(color[0], color[1], color[2]);
+    }
+
+    return { vertices, colors, count: vertices.length / 3 };
+}
+
 function createBuffers(geometry) {
     const vertexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
@@ -337,11 +519,16 @@ function initGeometry() {
     if (alternateMode) {
         // Alternate mode: neon colors
         obstacleBuffer = createBuffers(createCube([1, 0, 1]));      // Magenta obstacles
-        enemyBuffer = createBuffers(createPyramid([0, 1, 1])); // Cyan enemies
+        enemyBuffer = createBuffers(createPyramid([0, 1, 1])); // Cyan enemies (for radar only)
         playerBuffer = createBuffers(createCube([1, 1, 0])); // Yellow player (not used in main view)
         playerRadarBuffer = createBuffers(createPyramid([1, 1, 0])); // Yellow player radar icon
         enemyRadarBuffer = createBuffers(createPyramid([0, 1, 1])); // Cyan enemy radar icon
         groundBuffer = createBuffers(createGround(50, [0.1, 0.0, 0.2])); // Dark purple
+        // Tank geometry for alternate mode
+        tankBaseBuffer = createBuffers(createTankBase([0, 1, 1])); // Cyan base
+        tankTurretBuffer = createBuffers(createTankTurret([0.8, 1, 1])); // Light cyan turret
+        tankArrowBuffer = createBuffers(createTankArrow([1, 1, 0])); // Yellow arrow pointing forward (base direction)
+        movementArrowBuffer = createBuffers(createMovementArrow([1, 0, 0])); // Red arrow pointing in movement direction
     } else {
         // Normal mode: original colors
         obstacleBuffer = createBuffers(createCube([0.5, 0.5, 0.5]));      // Gray obstacles
@@ -471,6 +658,13 @@ function updateEnemies(deltaTime) {
 
         // Handle shooting - only shoot at player if they're alive
         if (!gameState.player.dead) {
+            // Update turret angle to track player (for alternate mode)
+            if (alternateMode) {
+                const dx = gameState.player.x - enemy.x;
+                const dz = gameState.player.z - enemy.z;
+                enemy.turretAngle = Math.atan2(dx, dz);
+            }
+            
             enemy.shootTimer -= deltaTime;
             if (enemy.shootTimer <= 0) {
                 // Calculate angle to player for shooting
@@ -483,7 +677,13 @@ function updateEnemies(deltaTime) {
                     vx: Math.sin(angleToPlayer) * 25,
                     vz: Math.cos(angleToPlayer) * 25
                 });
-                enemy.angle = angleToPlayer;
+                if (!alternateMode) {
+                    enemy.angle = angleToPlayer;
+                } else {
+                    // In alternate mode, use turret angle for shooting
+                    gameState.enemyShots[gameState.enemyShots.length - 1].vx = Math.sin(enemy.turretAngle) * 25;
+                    gameState.enemyShots[gameState.enemyShots.length - 1].vz = Math.cos(enemy.turretAngle) * 25;
+                }
                 enemy.shootTimer = 3 + Math.random() * 2;
             }
         }
@@ -507,68 +707,148 @@ function updatePlayer(deltaTime) {
     const turnSpeed = 2 * deltaTime;
     const playerRadius = 1.5;
 
-    // Rotation
-    if (keys['ArrowLeft']) {
-        gameState.player.angle += turnSpeed;
-    }
-    if (keys['ArrowRight']) {
-        gameState.player.angle -= turnSpeed;
-    }
-
-    // Calculate new position
-    let newX = gameState.player.x;
-    let newZ = gameState.player.z;
-
-    if (keys['ArrowUp']) {
-        newX += Math.sin(gameState.player.angle) * moveSpeed;
-        newZ += Math.cos(gameState.player.angle) * moveSpeed;
-    }
-    if (keys['ArrowDown']) {
-        newX -= Math.sin(gameState.player.angle) * moveSpeed;
-        newZ -= Math.cos(gameState.player.angle) * moveSpeed;
-    }
-
-    // Check collisions with obstacles
-    let collided = false;
-    for (const obstacle of gameState.obstacles) {
-        if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, 2)) {
-            collided = true;
-            break;
+    if (alternateMode) {
+        // Alternate mode: Tank base rotation with A/D, movement with W/S
+        const moveSpeed = 10 * deltaTime;
+        const baseRotateSpeed = 2.0 * deltaTime;
+        
+        // A/D keys rotate the tank base (same logic as turret rotation with arrow keys)
+        if (keys['a'] || keys['A']) {
+            // Rotate left (counter-clockwise) - decrease angle
+            gameState.player.angle -= baseRotateSpeed;
         }
-    }
-
-    // Check collisions with enemies
-    if (!collided) {
-        for (const enemy of gameState.enemies) {
-            if (checkCollision(newX, newZ, enemy.x, enemy.z, playerRadius, 1.5)) {
+        if (keys['d'] || keys['D']) {
+            // Rotate right (clockwise) - increase angle
+            gameState.player.angle += baseRotateSpeed;
+        }
+        
+        // Calculate new position based on tank base angle
+        // Use same negation logic as shooting direction
+        let newX = gameState.player.x;
+        let newZ = gameState.player.z;
+        
+        // W moves forward, S moves backward in the direction tank is facing
+        // Apply same negation as shooting to match visual rotation
+        const moveAngle = -gameState.player.angle;
+        if (keys['w'] || keys['W']) {
+            // Move forward in direction tank base is facing
+            newX += Math.sin(moveAngle) * moveSpeed;
+            newZ += Math.cos(moveAngle) * moveSpeed;
+        }
+        if (keys['s'] || keys['S']) {
+            // Move backward (opposite to facing direction)
+            newX -= Math.sin(moveAngle) * moveSpeed;
+            newZ -= Math.cos(moveAngle) * moveSpeed;
+        }
+        
+        // Check collisions with obstacles
+        let collided = false;
+        for (const obstacle of gameState.obstacles) {
+            if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, 2)) {
                 collided = true;
                 break;
             }
         }
-    }
 
-    // Update position only if no collision
-    if (!collided) {
-        gameState.player.x = newX;
-        gameState.player.z = newZ;
-    }
+        // Check collisions with enemies
+        if (!collided) {
+            for (const enemy of gameState.enemies) {
+                if (checkCollision(newX, newZ, enemy.x, enemy.z, playerRadius, 1.5)) {
+                    collided = true;
+                    break;
+                }
+            }
+        }
 
-    // Handle invulnerability
-    if (gameState.player.invulnerable) {
-        gameState.player.invulnerableTime -= deltaTime;
-        if (gameState.player.invulnerableTime <= 0) {
-            gameState.player.invulnerable = false;
+        // Update position only if no collision
+        if (!collided) {
+            gameState.player.x = newX;
+            gameState.player.z = newZ;
+        }
+
+        // Handle shooting - use turret angle in alternate mode
+        if (keys[' '] && !gameState.playerShot) {
+            // Negate turret angle to match the corrected turret rotation direction
+            const shootAngle = -gameState.player.turretAngle;
+            gameState.playerShot = {
+                x: gameState.player.x + Math.sin(shootAngle) * 2,
+                z: gameState.player.z + Math.cos(shootAngle) * 2,
+                vx: Math.sin(shootAngle) * 30,
+                vz: Math.cos(shootAngle) * 30
+            };
+        }
+    } else {
+        // Normal mode: original controls
+        // Rotation
+        if (keys['ArrowLeft']) {
+            gameState.player.angle += turnSpeed;
+        }
+        if (keys['ArrowRight']) {
+            gameState.player.angle -= turnSpeed;
+        }
+
+        // Calculate new position
+        let newX = gameState.player.x;
+        let newZ = gameState.player.z;
+
+        if (keys['ArrowUp']) {
+            newX += Math.sin(gameState.player.angle) * moveSpeed;
+            newZ += Math.cos(gameState.player.angle) * moveSpeed;
+        }
+        if (keys['ArrowDown']) {
+            newX -= Math.sin(gameState.player.angle) * moveSpeed;
+            newZ -= Math.cos(gameState.player.angle) * moveSpeed;
+        }
+
+        // Check collisions with obstacles
+        let collided = false;
+        for (const obstacle of gameState.obstacles) {
+            if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, 2)) {
+                collided = true;
+                break;
+            }
+        }
+
+        // Check collisions with enemies
+        if (!collided) {
+            for (const enemy of gameState.enemies) {
+                if (checkCollision(newX, newZ, enemy.x, enemy.z, playerRadius, 1.5)) {
+                    collided = true;
+                    break;
+                }
+            }
+        }
+
+        // Update position only if no collision
+        if (!collided) {
+            gameState.player.x = newX;
+            gameState.player.z = newZ;
+        }
+
+        // Handle shooting
+        if (keys[' '] && !gameState.playerShot) {
+            gameState.playerShot = {
+                x: gameState.player.x + Math.sin(gameState.player.angle) * 2,
+                z: gameState.player.z + Math.cos(gameState.player.angle) * 2,
+                vx: Math.sin(gameState.player.angle) * 30,
+                vz: Math.cos(gameState.player.angle) * 30
+            };
         }
     }
 
-    // Handle shooting
-    if (keys[' '] && !gameState.playerShot) {
-        gameState.playerShot = {
-            x: gameState.player.x + Math.sin(gameState.player.angle) * 2,
-            z: gameState.player.z + Math.cos(gameState.player.angle) * 2,
-            vx: Math.sin(gameState.player.angle) * 30,
-            vz: Math.cos(gameState.player.angle) * 30
-        };
+    // Handle invulnerability
+    if (alternateMode) {
+        // For testing: always invulnerable in alternate mode
+        gameState.player.invulnerable = true;
+        gameState.player.invulnerableTime = 999; // Keep it high
+    } else {
+        // Normal mode: original invulnerability logic
+        if (gameState.player.invulnerable) {
+            gameState.player.invulnerableTime -= deltaTime;
+            if (gameState.player.invulnerableTime <= 0) {
+                gameState.player.invulnerable = false;
+            }
+        }
     }
 }
 
@@ -639,8 +919,11 @@ function updateShots(deltaTime) {
             checkCollision(shot.x, shot.z, gameState.player.x, gameState.player.z, shotRadius, 1.5)) {
             gameState.enemyShots.splice(i, 1);
             // Player dies - enter dead state for 3 seconds, then invulnerable for 5 seconds
-            gameState.player.dead = true;
-            gameState.player.deadTime = 3;
+            // Skip death in alternate mode (testing)
+            if (!alternateMode) {
+                gameState.player.dead = true;
+                gameState.player.deadTime = 3;
+            }
         }
     }
 }
@@ -657,7 +940,7 @@ function spawnEnemy() {
         case 3: x = (Math.random() - 0.5) * 80; z = 45; break;
     }
 
-    gameState.enemies.push({ x, z, angle: 0, shootTimer: 3 + Math.random() * 2 });
+    gameState.enemies.push({ x, z, angle: 0, turretAngle: 0, shootTimer: 3 + Math.random() * 2 });
 }
 
 // Render scene
@@ -696,16 +979,82 @@ function render(currentTime) {
     const aspect = canvas.width / canvas.height;
     const projectionMatrix = mat4.perspective(Math.PI / 3, aspect, 0.1, 100.0);
 
-    // View matrix (camera behind and above player tank)
-    const eyeX = gameState.player.x - Math.sin(gameState.player.angle) * 2;
-    const eyeZ = gameState.player.z - Math.cos(gameState.player.angle) * 2;
-    const centerX = gameState.player.x + Math.sin(gameState.player.angle) * 10;
-    const centerZ = gameState.player.z + Math.cos(gameState.player.angle) * 10;
-    const viewMatrix = mat4.lookAt(
-        eyeX, 1.5, eyeZ,
-        centerX, 1, centerZ,
-        0, 1, 0
-    );
+    let viewMatrix;
+    if (alternateMode) {
+        // Third-person camera: behind and above player
+        // Mouse controls camera rotation (yaw left/right, pitch up/down)
+        const cameraDistance = 8;
+        const baseCameraHeight = 5;
+        const tankOffsetBack = 3; // Move tank back towards camera
+        
+        // Apply arrow key input to camera angles
+        if (keys['ArrowLeft']) {
+            cameraYaw += cameraRotateSpeed * deltaTime;
+        }
+        if (keys['ArrowRight']) {
+            cameraYaw -= cameraRotateSpeed * deltaTime;
+        }
+        if (keys['ArrowUp']) {
+            cameraPitch += cameraRotateSpeed * deltaTime;
+            // Clamp pitch to prevent camera from flipping
+            cameraPitch = Math.min(maxPitch, cameraPitch);
+        }
+        if (keys['ArrowDown']) {
+            cameraPitch -= cameraRotateSpeed * deltaTime;
+            // Clamp pitch to prevent camera from flipping
+            cameraPitch = Math.max(-maxPitch, cameraPitch);
+        }
+        
+        // Calculate camera position based on yaw and pitch
+        const horizontalDistance = cameraDistance * Math.cos(cameraPitch);
+        const verticalOffset = cameraDistance * Math.sin(cameraPitch);
+        const eyeX = gameState.player.x - Math.sin(cameraYaw) * horizontalDistance;
+        const eyeZ = gameState.player.z - Math.cos(cameraYaw) * horizontalDistance;
+        const eyeY = baseCameraHeight + verticalOffset;
+        
+        // Calculate look-at point (tank position offset back towards camera)
+        const cameraLookAtX = gameState.player.x + Math.sin(cameraYaw) * tankOffsetBack;
+        const cameraLookAtZ = gameState.player.z + Math.cos(cameraYaw) * tankOffsetBack;
+        
+        // Set turret to always face the direction the camera is facing
+        // Camera forward direction is the same as cameraYaw (horizontal rotation)
+        // Negate to fix rotation direction (clockwise vs counter-clockwise)
+        gameState.player.turretAngle = -cameraYaw;
+        
+        // Look at point behind tank (towards camera)
+        viewMatrix = mat4.lookAt(
+            eyeX, eyeY, eyeZ,
+            cameraLookAtX, 1, cameraLookAtZ,
+            0, 1, 0
+        );
+
+        // Keep crosshair fixed at center (Minecraft-style)
+        const crosshair = document.getElementById('crosshair');
+        if (crosshair) {
+            crosshair.style.left = '50%';
+            crosshair.style.top = '50%';
+            crosshair.style.transform = 'translate(-50%, -50%)';
+        }
+    } else {
+        // Normal mode: first-person camera
+        // Reset crosshair to center in normal mode
+        const crosshair = document.getElementById('crosshair');
+        if (crosshair) {
+            crosshair.style.left = '50%';
+            crosshair.style.top = '50%';
+            crosshair.style.transform = 'translate(-50%, -50%)';
+        }
+        
+        const eyeX = gameState.player.x - Math.sin(gameState.player.angle) * 2;
+        const eyeZ = gameState.player.z - Math.cos(gameState.player.angle) * 2;
+        const centerX = gameState.player.x + Math.sin(gameState.player.angle) * 10;
+        const centerZ = gameState.player.z + Math.cos(gameState.player.angle) * 10;
+        viewMatrix = mat4.lookAt(
+            eyeX, 1.5, eyeZ,
+            centerX, 1, centerZ,
+            0, 1, 0
+        );
+    }
 
     // Draw ground
     drawObject(groundBuffer, mat4.identity(), viewMatrix, projectionMatrix);
@@ -719,17 +1068,98 @@ function render(currentTime) {
         drawObject(obstacleBuffer, modelMatrix, viewMatrix, projectionMatrix);
     });
 
-    // Draw enemy tank
-    gameState.enemies.forEach(enemy => {
-        const modelMatrix = mat4.multiply(
-            mat4.translate(enemy.x, 0.5, enemy.z),
-            mat4.multiply(
-                mat4.rotateY(enemy.angle),
-                mat4.scale(1.5, 1, 1.5)
-            )
-        );
-        drawObject(enemyBuffer, modelMatrix, viewMatrix, projectionMatrix);
-    });
+    if (alternateMode) {
+        // Draw player tank (base + turret)
+        if (!gameState.player.dead) {
+            // Base (rotates with movement direction)
+            const baseMatrix = mat4.multiply(
+                mat4.translate(gameState.player.x, 0, gameState.player.z),
+                mat4.multiply(
+                    mat4.rotateY(gameState.player.angle),
+                    mat4.scale(1.5, 1, 1.5)
+                )
+            );
+            drawObject(tankBaseBuffer, baseMatrix, viewMatrix, projectionMatrix);
+            
+            // Turret (rotates independently to face cursor)
+            const turretMatrix = mat4.multiply(
+                mat4.translate(gameState.player.x, 0, gameState.player.z),
+                mat4.multiply(
+                    mat4.rotateY(gameState.player.turretAngle),
+                    mat4.scale(1.5, 1, 1.5)
+                )
+            );
+            drawObject(tankTurretBuffer, turretMatrix, viewMatrix, projectionMatrix);
+            
+            // Yellow arrow pointing forward (base facing direction)
+            const arrowMatrix = mat4.multiply(
+                mat4.translate(gameState.player.x, 0, gameState.player.z),
+                mat4.multiply(
+                    mat4.rotateY(gameState.player.angle),
+                    mat4.scale(1.5, 1, 1.5)
+                )
+            );
+            drawObject(tankArrowBuffer, arrowMatrix, viewMatrix, projectionMatrix);
+            
+            // Red arrow pointing in actual movement direction
+            // Calculate movement direction from the actual movement vector
+            if (Math.abs(gameState.player.velocity) > 0.1) {
+                // The movement calculation is:
+                // newX = x + sin(angle) * moveDistance
+                // newZ = z + cos(angle) * moveDistance
+                // So the movement direction vector is (sin(angle), cos(angle))
+                // When velocity is negative, we move in opposite direction
+                const moveDirX = Math.sin(gameState.player.angle) * Math.sign(gameState.player.velocity);
+                const moveDirZ = Math.cos(gameState.player.angle) * Math.sign(gameState.player.velocity);
+                // Calculate angle from movement vector
+                const movementAngle = Math.atan2(moveDirX, moveDirZ);
+                
+                const movementArrowMatrix = mat4.multiply(
+                    mat4.translate(gameState.player.x, 0, gameState.player.z),
+                    mat4.multiply(
+                        mat4.rotateY(movementAngle),
+                        mat4.scale(1.5, 1, 1.5)
+                    )
+                );
+                drawObject(movementArrowBuffer, movementArrowMatrix, viewMatrix, projectionMatrix);
+            }
+        }
+
+        // Draw enemy tanks (base + turret)
+        gameState.enemies.forEach(enemy => {
+            // Base (rotates with movement direction)
+            const baseMatrix = mat4.multiply(
+                mat4.translate(enemy.x, 0, enemy.z),
+                mat4.multiply(
+                    mat4.rotateY(enemy.angle),
+                    mat4.scale(1.5, 1, 1.5)
+                )
+            );
+            drawObject(tankBaseBuffer, baseMatrix, viewMatrix, projectionMatrix);
+            
+            // Turret (rotates to face player)
+            const turretMatrix = mat4.multiply(
+                mat4.translate(enemy.x, 0, enemy.z),
+                mat4.multiply(
+                    mat4.rotateY(enemy.turretAngle),
+                    mat4.scale(1.5, 1, 1.5)
+                )
+            );
+            drawObject(tankTurretBuffer, turretMatrix, viewMatrix, projectionMatrix);
+        });
+    } else {
+        // Normal mode: draw enemy tanks as pyramids
+        gameState.enemies.forEach(enemy => {
+            const modelMatrix = mat4.multiply(
+                mat4.translate(enemy.x, 0.5, enemy.z),
+                mat4.multiply(
+                    mat4.rotateY(enemy.angle),
+                    mat4.scale(1.5, 1, 1.5)
+                )
+            );
+            drawObject(enemyBuffer, modelMatrix, viewMatrix, projectionMatrix);
+        });
+    }
 
     // Draw player shot
     if (gameState.playerShot) {
@@ -819,6 +1249,12 @@ function init() {
     countdownElement = document.getElementById('countdown');
     invulnerableElement = document.getElementById('invulnerable');
 
+    // Hide cursor in alternate mode (since it starts in alternate mode)
+    const canvas = document.getElementById('glcanvas');
+    if (alternateMode && canvas) {
+        canvas.style.cursor = 'none';
+    }
+
     requestAnimationFrame(render);
 }
 
@@ -831,12 +1267,30 @@ window.addEventListener('keydown', (e) => {
         alternateMode = !alternateMode;
         // Recreate geometry with new colors
         initGeometry();
-        // Update crosshair color
+        // Update crosshair color and cursor visibility
         const crosshair = document.getElementById('crosshair');
+        const canvas = document.getElementById('glcanvas');
         if (alternateMode) {
             crosshair.style.setProperty('--crosshair-color', '#f0f');
+            // Keep crosshair at center
+            crosshair.style.left = '50%';
+            crosshair.style.top = '50%';
+            // Hide cursor in alternate mode
+            if (canvas) {
+                canvas.style.cursor = 'none';
+            }
+            // Reset camera angles
+            cameraYaw = gameState.player.angle; // Initialize to player angle
+            cameraPitch = 0;
         } else {
             crosshair.style.setProperty('--crosshair-color', '#0f0');
+            // Reset crosshair to center in normal mode
+            crosshair.style.left = '50%';
+            crosshair.style.top = '50%';
+            // Show cursor in normal mode
+            if (canvas) {
+                canvas.style.cursor = 'default';
+            }
         }
     }
 });
@@ -844,6 +1298,7 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
     keys[e.key] = false;
 });
+
 
 // Start the game
 window.onload = init;
