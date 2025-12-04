@@ -618,7 +618,15 @@ function spawnEnemy() {
 
 // Render scene
 function render(currentTime) {
+    if (renderCount === 0) {
+        console.log('First render call - currentTime:', currentTime);
+    }
+
     currentTime *= 0.001; // Convert to seconds
+
+    if (renderCount === 1) {
+        console.log('Second render call - currentTime after conversion:', currentTime, 'lastTime:', lastTime);
+    }
 
     // Initialize lastTime on first frame
     if (lastTime === 0) {
@@ -628,6 +636,11 @@ function render(currentTime) {
     }
 
     const deltaTime = Math.min(currentTime - lastTime, 0.1); // Cap at 0.1s to prevent large jumps
+
+    if (renderCount === 1) {
+        console.log('deltaTime calculated:', deltaTime, 'currentTime:', currentTime, 'lastTime:', lastTime);
+    }
+
     lastTime = currentTime;
 
     // Update game state
@@ -764,7 +777,7 @@ function init() {
     console.log('Player:', gameState.player);
     console.log('Enemies:', gameState.enemies);
     console.log('Enemy buffer:', enemyBuffer);
-    render();
+    requestAnimationFrame(render);
 }
 
 // Input handling
