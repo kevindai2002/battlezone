@@ -354,6 +354,7 @@ function checkCollision(x1, z1, x2, z2, radius1, radius2) {
 // Update enemies
 function updateEnemies(deltaTime) {
     const enemySpeed = 5 * deltaTime;
+    const enemyTurnSpeed = 2 * deltaTime;
 
     gameState.enemies.forEach(enemy => {
         // Calculate direction to player
@@ -365,25 +366,26 @@ function updateEnemies(deltaTime) {
             // Calculate target angle to player
             const targetAngle = Math.atan2(dx, dz);
 
-            // Smoothly rotate toward target with some randomness
+            // Calculate angle difference
             let angleDiff = targetAngle - enemy.angle;
             // Normalize angle difference to [-PI, PI]
             while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
             while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
 
-            // Add slight random variation (10%)
-            const randomTurn = (Math.random() - 0.5) * 0.2;
-            angleDiff += randomTurn;
-
-            // Limit rotation speed
-            const maxTurn = 3 * deltaTime;
-            if (Math.abs(angleDiff) > maxTurn) {
-                angleDiff = Math.sign(angleDiff) * maxTurn;
+            // Turn toward player at fixed speed (like player controls)
+            if (Math.abs(angleDiff) > enemyTurnSpeed) {
+                // Turn left or right at fixed speed
+                if (angleDiff > 0) {
+                    enemy.angle += enemyTurnSpeed;
+                } else {
+                    enemy.angle -= enemyTurnSpeed;
+                }
+            } else {
+                // Close enough, snap to target angle
+                enemy.angle = targetAngle;
             }
 
-            enemy.angle += angleDiff;
-
-            // Move in the direction the enemy is facing
+            // Always move forward in the direction facing
             const moveX = Math.sin(enemy.angle) * enemySpeed;
             const moveZ = Math.cos(enemy.angle) * enemySpeed;
 
