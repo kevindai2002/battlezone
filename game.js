@@ -360,18 +360,34 @@ function updateEnemies(deltaTime) {
         const distanceToPlayer = Math.sqrt(dx * dx + dz * dz);
 
         if (distanceToPlayer > 0) {
-            // Normalized direction to player
-            const dirX = dx / distanceToPlayer;
-            const dirZ = dz / distanceToPlayer;
+            // Calculate target angle to player
+            const targetAngle = Math.atan2(dx, dz);
 
-            // Add random component (30% random, 70% toward player)
-            const randomAngle = (Math.random() - 0.5) * Math.PI * 0.3;
-            const moveX = dirX * Math.cos(randomAngle) - dirZ * Math.sin(randomAngle);
-            const moveZ = dirX * Math.sin(randomAngle) + dirZ * Math.cos(randomAngle);
+            // Smoothly rotate toward target with some randomness
+            let angleDiff = targetAngle - enemy.angle;
+            // Normalize angle difference to [-PI, PI]
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+            // Add slight random variation (10%)
+            const randomTurn = (Math.random() - 0.5) * 0.2;
+            angleDiff += randomTurn;
+
+            // Limit rotation speed
+            const maxTurn = 3 * deltaTime;
+            if (Math.abs(angleDiff) > maxTurn) {
+                angleDiff = Math.sign(angleDiff) * maxTurn;
+            }
+
+            enemy.angle += angleDiff;
+
+            // Move in the direction the enemy is facing
+            const moveX = Math.sin(enemy.angle) * enemySpeed;
+            const moveZ = Math.cos(enemy.angle) * enemySpeed;
 
             // Calculate new position
-            const newX = enemy.x + moveX * enemySpeed;
-            const newZ = enemy.z + moveZ * enemySpeed;
+            const newX = enemy.x + moveX;
+            const newZ = enemy.z + moveZ;
 
             // Check collisions
             let collided = false;
@@ -403,8 +419,6 @@ function updateEnemies(deltaTime) {
             if (!collided) {
                 enemy.x = newX;
                 enemy.z = newZ;
-                // Update angle to face movement direction
-                enemy.angle = Math.atan2(moveX, moveZ);
             }
         }
 
