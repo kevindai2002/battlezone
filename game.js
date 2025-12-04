@@ -23,6 +23,9 @@ const gameState = {
 // Geometry buffers
 let cubeBuffer, pyramidBuffer, groundBuffer;
 
+// Input state
+const keys = {};
+
 // Matrix Math Utilities
 const mat4 = {
     identity: function() {
@@ -418,6 +421,15 @@ function init() {
     console.log('WebGL initialized successfully');
     render();
 }
+
+// Input handling
+window.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+});
+
+window.addEventListener('keyup', (e) => {
+    keys[e.key] = false;
+});
 
 // Start the game
 window.onload = init;
