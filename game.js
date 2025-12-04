@@ -14,7 +14,7 @@ const gameState = {
     playerShot: null,
     enemyShots: [],
     enemies: [
-        { x: 0, z: 15, angle: Math.PI, shootTimer: 3 }
+        { x: 20, z: 20, angle: 0, shootTimer: 3 }
     ],
     obstacles: [
         { x: -15, z: 10, type: 'cube' },
@@ -32,7 +32,6 @@ const keys = {};
 
 // Time tracking
 let lastTime = 0;
-let renderCount = 0;
 
 // Alternate mode flag
 let alternateMode = false;
@@ -354,13 +353,7 @@ function checkCollision(x1, z1, x2, z2, radius1, radius2) {
 function updateEnemies(deltaTime) {
     const enemySpeed = 5 * deltaTime;
 
-    gameState.enemies.forEach((enemy, index) => {
-        // Check for NaN before processing
-        if (isNaN(enemy.x) || isNaN(enemy.z)) {
-            console.error('Enemy', index, 'has NaN position BEFORE update:', enemy);
-            return;
-        }
-
+    gameState.enemies.forEach(enemy => {
         // Calculate direction to player
         const dx = gameState.player.x - enemy.x;
         const dz = gameState.player.z - enemy.z;
@@ -426,11 +419,6 @@ function updateEnemies(deltaTime) {
             if (!collided) {
                 enemy.x = newX;
                 enemy.z = newZ;
-
-                // Debug: Check for NaN after update
-                if (isNaN(enemy.x) || isNaN(enemy.z)) {
-                    console.error('Enemy became NaN! moveX:', moveX, 'moveZ:', moveZ, 'angle:', enemy.angle, 'enemySpeed:', enemySpeed, 'deltaTime:', deltaTime);
-                }
             }
         }
 
@@ -441,17 +429,13 @@ function updateEnemies(deltaTime) {
             const dx = gameState.player.x - enemy.x;
             const dz = gameState.player.z - enemy.z;
             const angleToPlayer = Math.atan2(dx, dz);
-
-            // Only shoot if enemy position is valid
-            if (!isNaN(enemy.x) && !isNaN(enemy.z)) {
-                gameState.enemyShots.push({
-                    x: enemy.x,
-                    z: enemy.z,
-                    vx: Math.sin(angleToPlayer) * 25,
-                    vz: Math.cos(angleToPlayer) * 25
-                });
-                enemy.angle = angleToPlayer;
-            }
+            gameState.enemyShots.push({
+                x: enemy.x,
+                z: enemy.z,
+                vx: Math.sin(angleToPlayer) * 25,
+                vz: Math.cos(angleToPlayer) * 25
+            });
+            enemy.angle = angleToPlayer;
             enemy.shootTimer = 3 + Math.random() * 2;
         }
     });
@@ -618,15 +602,7 @@ function spawnEnemy() {
 
 // Render scene
 function render(currentTime) {
-    if (renderCount === 0) {
-        console.log('First render call - currentTime:', currentTime);
-    }
-
     currentTime *= 0.001; // Convert to seconds
-
-    if (renderCount === 1) {
-        console.log('Second render call - currentTime after conversion:', currentTime, 'lastTime:', lastTime);
-    }
 
     // Initialize lastTime on first frame
     if (lastTime === 0) {
@@ -636,11 +612,6 @@ function render(currentTime) {
     }
 
     const deltaTime = Math.min(currentTime - lastTime, 0.1); // Cap at 0.1s to prevent large jumps
-
-    if (renderCount === 1) {
-        console.log('deltaTime calculated:', deltaTime, 'currentTime:', currentTime, 'lastTime:', lastTime);
-    }
-
     lastTime = currentTime;
 
     // Update game state
@@ -689,13 +660,7 @@ function render(currentTime) {
     });
 
     // Draw enemy tank
-    if (renderCount === 0) {
-        console.log('First render - drawing', gameState.enemies.length, 'enemies');
-    }
     gameState.enemies.forEach(enemy => {
-        if (renderCount === 0) {
-            console.log('Enemy position:', enemy.x, enemy.z, 'angle:', enemy.angle);
-        }
         const modelMatrix = mat4.multiply(
             mat4.translate(enemy.x, 0.5, enemy.z),
             mat4.multiply(
@@ -705,7 +670,6 @@ function render(currentTime) {
         );
         drawObject(enemyBuffer, modelMatrix, viewMatrix, projectionMatrix);
     });
-    renderCount++;
 
     // Draw player shot
     if (gameState.playerShot) {
@@ -772,11 +736,6 @@ function init() {
     if (!initShaders()) return;
     initGeometry();
 
-    console.log('WebGL initialized successfully');
-    console.log('Initial game state:');
-    console.log('Player:', gameState.player);
-    console.log('Enemies:', gameState.enemies);
-    console.log('Enemy buffer:', enemyBuffer);
     requestAnimationFrame(render);
 }
 
