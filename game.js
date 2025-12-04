@@ -354,7 +354,7 @@ function checkCollision(x1, z1, x2, z2, radius1, radius2) {
 // Update enemies
 function updateEnemies(deltaTime) {
     const enemySpeed = 5 * deltaTime;
-    const enemyTurnSpeed = 2 * deltaTime;
+    const enemyTurnSpeed = 1 * deltaTime; // Slower turn speed to see rotation
 
     gameState.enemies.forEach(enemy => {
         // Calculate direction to player
@@ -373,16 +373,11 @@ function updateEnemies(deltaTime) {
             while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
 
             // Turn toward player at fixed speed (like player controls)
-            if (Math.abs(angleDiff) > enemyTurnSpeed) {
-                // Turn left or right at fixed speed
-                if (angleDiff > 0) {
-                    enemy.angle += enemyTurnSpeed;
-                } else {
-                    enemy.angle -= enemyTurnSpeed;
-                }
+            // Turn left or right at fixed speed
+            if (angleDiff > 0) {
+                enemy.angle += enemyTurnSpeed;
             } else {
-                // Close enough, snap to target angle
-                enemy.angle = targetAngle;
+                enemy.angle -= enemyTurnSpeed;
             }
 
             // Always move forward in the direction facing
