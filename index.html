@@ -61,6 +61,33 @@
             border: 2px solid #0f0;
             background: rgba(0, 0, 0, 0.5);
         }
+        #countdown {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: red;
+            font-family: monospace;
+            font-size: 48px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px black;
+            display: none;
+            pointer-events: none;
+        }
+        #invulnerable {
+            position: absolute;
+            top: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgb(153, 217, 255);
+            font-family: monospace;
+            font-size: 36px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px black;
+            display: none;
+            pointer-events: none;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -69,6 +96,8 @@
     <div id="info">
         Controls: Arrow Keys (move), Space (shoot), ! (alternate mode)
     </div>
+    <div id="countdown"></div>
+    <div id="invulnerable"></div>
     <script src="game.js"></script>
 </body>
 </html>

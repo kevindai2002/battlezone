@@ -8,6 +8,8 @@ const gameState = {
         x: 0,
         z: 0,
         angle: 0,
+        dead: false,
+        deadTime: 0,
         invulnerable: false,
         invulnerableTime: 0
     },
@@ -35,6 +37,10 @@ let lastTime = 0;
 
 // Alternate mode flag
 let alternateMode = false;
+
+// UI elements
+let countdownElement;
+let invulnerableElement;
 
 // Matrix Math Utilities
 const mat4 = {
@@ -361,35 +367,46 @@ function updateEnemies(deltaTime) {
     const enemyTurnSpeed = 1 * deltaTime; // Slower turn speed to see rotation
 
     gameState.enemies.forEach(enemy => {
-        // Calculate direction to player
-        const dx = gameState.player.x - enemy.x;
-        const dz = gameState.player.z - enemy.z;
-        const distanceToPlayer = Math.sqrt(dx * dx + dz * dz);
+        // Check for obstacles ahead
+        const lookAheadDist = 5;
+        const lookAheadX = enemy.x + Math.sin(enemy.angle) * lookAheadDist;
+        const lookAheadZ = enemy.z + Math.cos(enemy.angle) * lookAheadDist;
 
-        if (distanceToPlayer > 0) {
-            // Check for obstacles ahead
-            const lookAheadDist = 5;
-            const lookAheadX = enemy.x + Math.sin(enemy.angle) * lookAheadDist;
-            const lookAheadZ = enemy.z + Math.cos(enemy.angle) * lookAheadDist;
+        let obstacleAhead = false;
+        let avoidLeft = false;
 
-            let obstacleAhead = false;
-            let avoidLeft = false;
-
-            // Check if obstacle is in front
-            for (const obstacle of gameState.obstacles) {
-                if (checkCollision(lookAheadX, lookAheadZ, obstacle.x, obstacle.z, 1.5, 3)) {
-                    obstacleAhead = true;
-                    // Determine which way to turn to avoid
-                    const obstacleAngle = Math.atan2(obstacle.x - enemy.x, obstacle.z - enemy.z);
-                    let angleDiffToObstacle = obstacleAngle - enemy.angle;
-                    while (angleDiffToObstacle > Math.PI) angleDiffToObstacle -= 2 * Math.PI;
-                    while (angleDiffToObstacle < -Math.PI) angleDiffToObstacle += 2 * Math.PI;
-                    avoidLeft = angleDiffToObstacle > 0;
-                    break;
-                }
+        // Check if obstacle is in front
+        for (const obstacle of gameState.obstacles) {
+            if (checkCollision(lookAheadX, lookAheadZ, obstacle.x, obstacle.z, 1.5, 3)) {
+                obstacleAhead = true;
+                // Determine which way to turn to avoid
+                const obstacleAngle = Math.atan2(obstacle.x - enemy.x, obstacle.z - enemy.z);
+                let angleDiffToObstacle = obstacleAngle - enemy.angle;
+                while (angleDiffToObstacle > Math.PI) angleDiffToObstacle -= 2 * Math.PI;
+                while (angleDiffToObstacle < -Math.PI) angleDiffToObstacle += 2 * Math.PI;
+                avoidLeft = angleDiffToObstacle > 0;
+                break;
             }
+        }
 
-            // Calculate target angle to player
+        // Decide on movement
+        if (obstacleAhead) {
+            // Avoid obstacle by turning away
+            if (avoidLeft) {
+                enemy.angle -= enemyTurnSpeed * 1.5;
+            } else {
+                enemy.angle += enemyTurnSpeed * 1.5;
+            }
+        } else if (gameState.player.dead) {
+            // If player is dead, just wander randomly
+            if (Math.random() < 0.1) {
+                const randomTurn = (Math.random() - 0.5) * enemyTurnSpeed * 3;
+                enemy.angle += randomTurn;
+            }
+        } else {
+            // Player is alive - track them
+            const dx = gameState.player.x - enemy.x;
+            const dz = gameState.player.z - enemy.z;
             const targetAngle = Math.atan2(dx, dz);
 
             // Calculate angle difference
@@ -398,15 +415,7 @@ function updateEnemies(deltaTime) {
             while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
             while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
 
-            // Decide on movement
-            if (obstacleAhead) {
-                // Avoid obstacle by turning away
-                if (avoidLeft) {
-                    enemy.angle -= enemyTurnSpeed * 1.5;
-                } else {
-                    enemy.angle += enemyTurnSpeed * 1.5;
-                }
-            } else if (Math.random() < 0.4) {
+            if (Math.random() < 0.4) {
                 // Increased random variation (40% chance to turn randomly)
                 const randomTurn = (Math.random() - 0.5) * enemyTurnSpeed * 3;
                 enemy.angle += randomTurn;
@@ -418,69 +427,82 @@ function updateEnemies(deltaTime) {
                     enemy.angle -= enemyTurnSpeed;
                 }
             }
+        }
 
-            // Always move forward in the direction facing
-            const moveX = Math.sin(enemy.angle) * enemySpeed;
-            const moveZ = Math.cos(enemy.angle) * enemySpeed;
+        // Always move forward in the direction facing
+        const moveX = Math.sin(enemy.angle) * enemySpeed;
+        const moveZ = Math.cos(enemy.angle) * enemySpeed;
 
-            // Calculate new position
-            const newX = enemy.x + moveX;
-            const newZ = enemy.z + moveZ;
+        // Calculate new position
+        const newX = enemy.x + moveX;
+        const newZ = enemy.z + moveZ;
 
-            // Check collisions
-            let collided = false;
+        // Check collisions
+        let collided = false;
 
-            // Check obstacles
-            for (const obstacle of gameState.obstacles) {
-                if (checkCollision(newX, newZ, obstacle.x, obstacle.z, 1.5, 2)) {
+        // Check obstacles
+        for (const obstacle of gameState.obstacles) {
+            if (checkCollision(newX, newZ, obstacle.x, obstacle.z, 1.5, 2)) {
+                collided = true;
+                break;
+            }
+        }
+
+        // Check other enemies
+        if (!collided) {
+            for (const other of gameState.enemies) {
+                if (other !== enemy && checkCollision(newX, newZ, other.x, other.z, 1.5, 1.5)) {
                     collided = true;
                     break;
                 }
             }
-
-            // Check other enemies
-            if (!collided) {
-                for (const other of gameState.enemies) {
-                    if (other !== enemy && checkCollision(newX, newZ, other.x, other.z, 1.5, 1.5)) {
-                        collided = true;
-                        break;
-                    }
-                }
-            }
-
-            // Check player
-            if (!collided && checkCollision(newX, newZ, gameState.player.x, gameState.player.z, 1.5, 1.5)) {
-                collided = true;
-            }
-
-            // Update position if no collision
-            if (!collided) {
-                enemy.x = newX;
-                enemy.z = newZ;
-            }
         }
 
-        // Handle shooting
-        enemy.shootTimer -= deltaTime;
-        if (enemy.shootTimer <= 0) {
-            // Calculate angle to player for shooting
-            const dx = gameState.player.x - enemy.x;
-            const dz = gameState.player.z - enemy.z;
-            const angleToPlayer = Math.atan2(dx, dz);
-            gameState.enemyShots.push({
-                x: enemy.x,
-                z: enemy.z,
-                vx: Math.sin(angleToPlayer) * 25,
-                vz: Math.cos(angleToPlayer) * 25
-            });
-            enemy.angle = angleToPlayer;
-            enemy.shootTimer = 3 + Math.random() * 2;
+        // Check player
+        if (!collided && checkCollision(newX, newZ, gameState.player.x, gameState.player.z, 1.5, 1.5)) {
+            collided = true;
+        }
+
+        // Update position if no collision
+        if (!collided) {
+            enemy.x = newX;
+            enemy.z = newZ;
+        }
+
+        // Handle shooting - only shoot at player if they're alive
+        if (!gameState.player.dead) {
+            enemy.shootTimer -= deltaTime;
+            if (enemy.shootTimer <= 0) {
+                // Calculate angle to player for shooting
+                const dx = gameState.player.x - enemy.x;
+                const dz = gameState.player.z - enemy.z;
+                const angleToPlayer = Math.atan2(dx, dz);
+                gameState.enemyShots.push({
+                    x: enemy.x,
+                    z: enemy.z,
+                    vx: Math.sin(angleToPlayer) * 25,
+                    vz: Math.cos(angleToPlayer) * 25
+                });
+                enemy.angle = angleToPlayer;
+                enemy.shootTimer = 3 + Math.random() * 2;
+            }
         }
     });
 }
 
 // Update player based on input
 function updatePlayer(deltaTime) {
+    // Handle dead state
+    if (gameState.player.dead) {
+        gameState.player.deadTime -= deltaTime;
+        if (gameState.player.deadTime <= 0) {
+            gameState.player.dead = false;
+            gameState.player.invulnerable = true;
+            gameState.player.invulnerableTime = 5;
+        }
+        return; // Player cannot move while dead
+    }
+
     const moveSpeed = 10 * deltaTime;
     const turnSpeed = 2 * deltaTime;
     const playerRadius = 1.5;
@@ -613,12 +635,12 @@ function updateShots(deltaTime) {
         if (hitObstacle) continue;
 
         // Check collision with player
-        if (!gameState.player.invulnerable &&
+        if (!gameState.player.invulnerable && !gameState.player.dead &&
             checkCollision(shot.x, shot.z, gameState.player.x, gameState.player.z, shotRadius, 1.5)) {
             gameState.enemyShots.splice(i, 1);
-            // Player dies - respawn at same location with invulnerability
-            gameState.player.invulnerable = true;
-            gameState.player.invulnerableTime = 3;
+            // Player dies - enter dead state for 3 seconds, then invulnerable for 5 seconds
+            gameState.player.dead = true;
+            gameState.player.deadTime = 3;
         }
     }
 }
@@ -758,15 +780,31 @@ function render(currentTime) {
         drawObject(enemyRadarBuffer, modelMatrix, radarView, radarProjection);
     });
 
-    // Draw player on radar
-    const playerModel = mat4.multiply(
-        mat4.translate(gameState.player.x, 0.5, gameState.player.z),
-        mat4.multiply(
-            mat4.rotateY(gameState.player.angle),
-            mat4.scale(1.5, 1, 1.5)
-        )
-    );
-    drawObject(playerRadarBuffer, playerModel, radarView, radarProjection);
+    // Draw player on radar (only if not dead)
+    if (!gameState.player.dead) {
+        const playerModel = mat4.multiply(
+            mat4.translate(gameState.player.x, 0.5, gameState.player.z),
+            mat4.multiply(
+                mat4.rotateY(gameState.player.angle),
+                mat4.scale(1.5, 1, 1.5)
+            )
+        );
+        drawObject(playerRadarBuffer, playerModel, radarView, radarProjection);
+    }
+
+    // Update countdown display
+    if (gameState.player.dead && gameState.player.deadTime > 0) {
+        countdownElement.style.display = 'block';
+        countdownElement.textContent = Math.ceil(gameState.player.deadTime);
+        invulnerableElement.style.display = 'none';
+    } else if (gameState.player.invulnerable && gameState.player.invulnerableTime > 0) {
+        countdownElement.style.display = 'none';
+        invulnerableElement.style.display = 'block';
+        invulnerableElement.textContent = 'INVULNERABLE\n' + Math.ceil(gameState.player.invulnerableTime);
+    } else {
+        countdownElement.style.display = 'none';
+        invulnerableElement.style.display = 'none';
+    }
 
     requestAnimationFrame(render);
 }
@@ -776,6 +814,10 @@ function init() {
     if (!initWebGL()) return;
     if (!initShaders()) return;
     initGeometry();
+
+    // Get UI elements
+    countdownElement = document.getElementById('countdown');
+    invulnerableElement = document.getElementById('invulnerable');
 
     requestAnimationFrame(render);
 }
