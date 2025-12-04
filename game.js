@@ -354,7 +354,13 @@ function checkCollision(x1, z1, x2, z2, radius1, radius2) {
 function updateEnemies(deltaTime) {
     const enemySpeed = 5 * deltaTime;
 
-    gameState.enemies.forEach(enemy => {
+    gameState.enemies.forEach((enemy, index) => {
+        // Check for NaN before processing
+        if (isNaN(enemy.x) || isNaN(enemy.z)) {
+            console.error('Enemy', index, 'has NaN position BEFORE update:', enemy);
+            return;
+        }
+
         // Calculate direction to player
         const dx = gameState.player.x - enemy.x;
         const dz = gameState.player.z - enemy.z;
@@ -420,6 +426,11 @@ function updateEnemies(deltaTime) {
             if (!collided) {
                 enemy.x = newX;
                 enemy.z = newZ;
+
+                // Debug: Check for NaN after update
+                if (isNaN(enemy.x) || isNaN(enemy.z)) {
+                    console.error('Enemy became NaN! moveX:', moveX, 'moveZ:', moveZ, 'angle:', enemy.angle, 'enemySpeed:', enemySpeed, 'deltaTime:', deltaTime);
+                }
             }
         }
 
@@ -430,13 +441,17 @@ function updateEnemies(deltaTime) {
             const dx = gameState.player.x - enemy.x;
             const dz = gameState.player.z - enemy.z;
             const angleToPlayer = Math.atan2(dx, dz);
-            gameState.enemyShots.push({
-                x: enemy.x,
-                z: enemy.z,
-                vx: Math.sin(angleToPlayer) * 25,
-                vz: Math.cos(angleToPlayer) * 25
-            });
-            enemy.angle = angleToPlayer;
+
+            // Only shoot if enemy position is valid
+            if (!isNaN(enemy.x) && !isNaN(enemy.z)) {
+                gameState.enemyShots.push({
+                    x: enemy.x,
+                    z: enemy.z,
+                    vx: Math.sin(angleToPlayer) * 25,
+                    vz: Math.cos(angleToPlayer) * 25
+                });
+                enemy.angle = angleToPlayer;
+            }
             enemy.shootTimer = 3 + Math.random() * 2;
         }
     });
