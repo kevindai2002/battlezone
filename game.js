@@ -7,10 +7,14 @@ const gameState = {
     player: {
         x: 0,
         z: 0,
-        angle: 0
+        angle: 0,
+        invulnerable: false,
+        invulnerableTime: 0
     },
+    playerShot: null,
+    enemyShots: [],
     enemies: [
-        { x: 20, z: 20, angle: 0 }
+        { x: 20, z: 20, angle: 0, shootTimer: 3 }
     ],
     obstacles: [
         { x: -15, z: 10, type: 'cube' },
@@ -392,6 +396,21 @@ function updateEnemies(deltaTime) {
                 enemy.angle = Math.atan2(moveX, moveZ);
             }
         }
+
+        // Handle shooting
+        enemy.shootTimer -= deltaTime;
+        if (enemy.shootTimer <= 0) {
+            // Shoot toward player
+            const angleToPlayer = Math.atan2(dx, dz);
+            gameState.enemyShots.push({
+                x: enemy.x,
+                z: enemy.z,
+                vx: Math.sin(angleToPlayer) * 25,
+                vz: Math.cos(angleToPlayer) * 25
+            });
+            enemy.angle = angleToPlayer;
+            enemy.shootTimer = 3 + Math.random() * 2;
+        }
     });
 }
 
@@ -446,6 +465,112 @@ function updatePlayer(deltaTime) {
         gameState.player.x = newX;
         gameState.player.z = newZ;
     }
+
+    // Handle invulnerability
+    if (gameState.player.invulnerable) {
+        gameState.player.invulnerableTime -= deltaTime;
+        if (gameState.player.invulnerableTime <= 0) {
+            gameState.player.invulnerable = false;
+        }
+    }
+
+    // Handle shooting
+    if (keys[' '] && !gameState.playerShot) {
+        gameState.playerShot = {
+            x: gameState.player.x + Math.sin(gameState.player.angle) * 2,
+            z: gameState.player.z + Math.cos(gameState.player.angle) * 2,
+            vx: Math.sin(gameState.player.angle) * 30,
+            vz: Math.cos(gameState.player.angle) * 30
+        };
+    }
+}
+
+// Update shots
+function updateShots(deltaTime) {
+    const shotRadius = 0.5;
+    const fieldSize = 50;
+
+    // Update player shot
+    if (gameState.playerShot) {
+        gameState.playerShot.x += gameState.playerShot.vx * deltaTime;
+        gameState.playerShot.z += gameState.playerShot.vz * deltaTime;
+
+        // Check if out of bounds
+        if (Math.abs(gameState.playerShot.x) > fieldSize || Math.abs(gameState.playerShot.z) > fieldSize) {
+            gameState.playerShot = null;
+        } else {
+            // Check collision with obstacles
+            for (const obstacle of gameState.obstacles) {
+                if (checkCollision(gameState.playerShot.x, gameState.playerShot.z, obstacle.x, obstacle.z, shotRadius, 2)) {
+                    gameState.playerShot = null;
+                    break;
+                }
+            }
+
+            // Check collision with enemies
+            if (gameState.playerShot) {
+                for (let i = gameState.enemies.length - 1; i >= 0; i--) {
+                    const enemy = gameState.enemies[i];
+                    if (checkCollision(gameState.playerShot.x, gameState.playerShot.z, enemy.x, enemy.z, shotRadius, 1.5)) {
+                        gameState.playerShot = null;
+                        gameState.enemies.splice(i, 1);
+                        // Spawn new enemy at random edge
+                        spawnEnemy();
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Update enemy shots
+    for (let i = gameState.enemyShots.length - 1; i >= 0; i--) {
+        const shot = gameState.enemyShots[i];
+        shot.x += shot.vx * deltaTime;
+        shot.z += shot.vz * deltaTime;
+
+        // Check if out of bounds
+        if (Math.abs(shot.x) > fieldSize || Math.abs(shot.z) > fieldSize) {
+            gameState.enemyShots.splice(i, 1);
+            continue;
+        }
+
+        // Check collision with obstacles
+        let hitObstacle = false;
+        for (const obstacle of gameState.obstacles) {
+            if (checkCollision(shot.x, shot.z, obstacle.x, obstacle.z, shotRadius, 2)) {
+                gameState.enemyShots.splice(i, 1);
+                hitObstacle = true;
+                break;
+            }
+        }
+
+        if (hitObstacle) continue;
+
+        // Check collision with player
+        if (!gameState.player.invulnerable &&
+            checkCollision(shot.x, shot.z, gameState.player.x, gameState.player.z, shotRadius, 1.5)) {
+            gameState.enemyShots.splice(i, 1);
+            // Player dies - respawn at same location with invulnerability
+            gameState.player.invulnerable = true;
+            gameState.player.invulnerableTime = 3;
+        }
+    }
+}
+
+// Spawn enemy at random edge
+function spawnEnemy() {
+    const edge = Math.floor(Math.random() * 4);
+    let x, z;
+
+    switch(edge) {
+        case 0: x = -45; z = (Math.random() - 0.5) * 80; break;
+        case 1: x = 45; z = (Math.random() - 0.5) * 80; break;
+        case 2: x = (Math.random() - 0.5) * 80; z = -45; break;
+        case 3: x = (Math.random() - 0.5) * 80; z = 45; break;
+    }
+
+    gameState.enemies.push({ x, z, angle: 0, shootTimer: 3 + Math.random() * 2 });
 }
 
 // Render scene
@@ -457,6 +582,7 @@ function render(currentTime) {
     // Update game state
     updatePlayer(deltaTime);
     updateEnemies(deltaTime);
+    updateShots(deltaTime);
 
     const canvas = gl.canvas;
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -501,6 +627,24 @@ function render(currentTime) {
             )
         );
         drawObject(pyramidBuffer, modelMatrix, viewMatrix, projectionMatrix);
+    });
+
+    // Draw player shot
+    if (gameState.playerShot) {
+        const modelMatrix = mat4.multiply(
+            mat4.translate(gameState.playerShot.x, 0.5, gameState.playerShot.z),
+            mat4.scale(0.5, 0.5, 0.5)
+        );
+        drawObject(cubeBuffer, modelMatrix, viewMatrix, projectionMatrix);
+    }
+
+    // Draw enemy shots
+    gameState.enemyShots.forEach(shot => {
+        const modelMatrix = mat4.multiply(
+            mat4.translate(shot.x, 0.5, shot.z),
+            mat4.scale(0.5, 0.5, 0.5)
+        );
+        drawObject(cubeBuffer, modelMatrix, viewMatrix, projectionMatrix);
     });
 
     // === RADAR VIEW (Orthographic top-down) ===
