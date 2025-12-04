@@ -25,7 +25,7 @@ const gameState = {
 };
 
 // Geometry buffers
-let obstacleBuffer, enemyBuffer, groundBuffer;
+let obstacleBuffer, enemyBuffer, groundBuffer, playerBuffer;
 
 // Input state
 const keys = {};
@@ -332,11 +332,13 @@ function initGeometry() {
         // Alternate mode: neon colors
         obstacleBuffer = createBuffers(createCube([1, 0, 1]));      // Magenta obstacles
         enemyBuffer = createBuffers(createCube([0, 1, 1])); // Cyan enemies
+        playerBuffer = createBuffers(createCube([1, 1, 0])); // Yellow player
         groundBuffer = createBuffers(createGround(50, [0.1, 0.0, 0.2])); // Dark purple
     } else {
         // Normal mode: original colors
         obstacleBuffer = createBuffers(createCube([0.5, 0.5, 0.5]));      // Gray obstacles
         enemyBuffer = createBuffers(createCube([1, 0, 0])); // Red enemies
+        playerBuffer = createBuffers(createCube([0, 0, 1])); // Blue player
         groundBuffer = createBuffers(createGround(50, [0.2, 0.2, 0.2])); // Gray
     }
 }
@@ -725,7 +727,7 @@ function render(currentTime) {
             mat4.scale(1.5, 1, 1.5)
         )
     );
-    drawObject(enemyBuffer, playerModel, radarView, radarProjection);
+    drawObject(playerBuffer, playerModel, radarView, radarProjection);
 
     requestAnimationFrame(render);
 }
