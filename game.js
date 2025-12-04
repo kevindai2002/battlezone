@@ -331,13 +331,13 @@ function initGeometry() {
     if (alternateMode) {
         // Alternate mode: neon colors
         obstacleBuffer = createBuffers(createCube([1, 0, 1]));      // Magenta obstacles
-        enemyBuffer = createBuffers(createCube([0, 1, 1])); // Cyan enemies
+        enemyBuffer = createBuffers(createPyramid([0, 1, 1])); // Cyan enemies
         playerBuffer = createBuffers(createCube([1, 1, 0])); // Yellow player
         groundBuffer = createBuffers(createGround(50, [0.1, 0.0, 0.2])); // Dark purple
     } else {
         // Normal mode: original colors
         obstacleBuffer = createBuffers(createCube([0.5, 0.5, 0.5]));      // Gray obstacles
-        enemyBuffer = createBuffers(createCube([1, 0, 0])); // Red enemies
+        enemyBuffer = createBuffers(createPyramid([1, 0, 0])); // Red enemies
         playerBuffer = createBuffers(createCube([0, 0, 1])); // Blue player
         groundBuffer = createBuffers(createGround(50, [0.2, 0.2, 0.2])); // Gray
     }
