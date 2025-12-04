@@ -334,6 +334,67 @@ function checkCollision(x1, z1, x2, z2, radius1, radius2) {
     return distance < (radius1 + radius2);
 }
 
+// Update enemies
+function updateEnemies(deltaTime) {
+    const enemySpeed = 5 * deltaTime;
+
+    gameState.enemies.forEach(enemy => {
+        // Calculate direction to player
+        const dx = gameState.player.x - enemy.x;
+        const dz = gameState.player.z - enemy.z;
+        const distanceToPlayer = Math.sqrt(dx * dx + dz * dz);
+
+        if (distanceToPlayer > 0) {
+            // Normalized direction to player
+            const dirX = dx / distanceToPlayer;
+            const dirZ = dz / distanceToPlayer;
+
+            // Add random component (30% random, 70% toward player)
+            const randomAngle = (Math.random() - 0.5) * Math.PI * 0.3;
+            const moveX = dirX * Math.cos(randomAngle) - dirZ * Math.sin(randomAngle);
+            const moveZ = dirX * Math.sin(randomAngle) + dirZ * Math.cos(randomAngle);
+
+            // Calculate new position
+            const newX = enemy.x + moveX * enemySpeed;
+            const newZ = enemy.z + moveZ * enemySpeed;
+
+            // Check collisions
+            let collided = false;
+
+            // Check obstacles
+            for (const obstacle of gameState.obstacles) {
+                if (checkCollision(newX, newZ, obstacle.x, obstacle.z, 1.5, 2)) {
+                    collided = true;
+                    break;
+                }
+            }
+
+            // Check other enemies
+            if (!collided) {
+                for (const other of gameState.enemies) {
+                    if (other !== enemy && checkCollision(newX, newZ, other.x, other.z, 1.5, 1.5)) {
+                        collided = true;
+                        break;
+                    }
+                }
+            }
+
+            // Check player
+            if (!collided && checkCollision(newX, newZ, gameState.player.x, gameState.player.z, 1.5, 1.5)) {
+                collided = true;
+            }
+
+            // Update position if no collision
+            if (!collided) {
+                enemy.x = newX;
+                enemy.z = newZ;
+                // Update angle to face movement direction
+                enemy.angle = Math.atan2(moveX, moveZ);
+            }
+        }
+    });
+}
+
 // Update player based on input
 function updatePlayer(deltaTime) {
     const moveSpeed = 10 * deltaTime;
@@ -395,6 +456,7 @@ function render(currentTime) {
 
     // Update game state
     updatePlayer(deltaTime);
+    updateEnemies(deltaTime);
 
     const canvas = gl.canvas;
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
