@@ -23,6 +23,12 @@ const gameState = {
 // Geometry buffers
 let cubeBuffer, pyramidBuffer, groundBuffer;
 
+// Input state
+const keys = {};
+
+// Time tracking
+let lastTime = 0;
+
 // Matrix Math Utilities
 const mat4 = {
     identity: function() {
@@ -320,8 +326,76 @@ function initGeometry() {
     groundBuffer = createBuffers(createGround(50, [0.2, 0.2, 0.2]));
 }
 
+// Check collision between two objects
+function checkCollision(x1, z1, x2, z2, radius1, radius2) {
+    const dx = x1 - x2;
+    const dz = z1 - z2;
+    const distance = Math.sqrt(dx * dx + dz * dz);
+    return distance < (radius1 + radius2);
+}
+
+// Update player based on input
+function updatePlayer(deltaTime) {
+    const moveSpeed = 10 * deltaTime;
+    const turnSpeed = 2 * deltaTime;
+    const playerRadius = 1.5;
+
+    // Rotation
+    if (keys['ArrowLeft']) {
+        gameState.player.angle -= turnSpeed;
+    }
+    if (keys['ArrowRight']) {
+        gameState.player.angle += turnSpeed;
+    }
+
+    // Calculate new position
+    let newX = gameState.player.x;
+    let newZ = gameState.player.z;
+
+    if (keys['ArrowUp']) {
+        newX += Math.sin(gameState.player.angle) * moveSpeed;
+        newZ += Math.cos(gameState.player.angle) * moveSpeed;
+    }
+    if (keys['ArrowDown']) {
+        newX -= Math.sin(gameState.player.angle) * moveSpeed;
+        newZ -= Math.cos(gameState.player.angle) * moveSpeed;
+    }
+
+    // Check collisions with obstacles
+    let collided = false;
+    for (const obstacle of gameState.obstacles) {
+        if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, 2)) {
+            collided = true;
+            break;
+        }
+    }
+
+    // Check collisions with enemies
+    if (!collided) {
+        for (const enemy of gameState.enemies) {
+            if (checkCollision(newX, newZ, enemy.x, enemy.z, playerRadius, 1.5)) {
+                collided = true;
+                break;
+            }
+        }
+    }
+
+    // Update position only if no collision
+    if (!collided) {
+        gameState.player.x = newX;
+        gameState.player.z = newZ;
+    }
+}
+
 // Render scene
-function render() {
+function render(currentTime) {
+    currentTime *= 0.001; // Convert to seconds
+    const deltaTime = currentTime - lastTime;
+    lastTime = currentTime;
+
+    // Update game state
+    updatePlayer(deltaTime);
+
     const canvas = gl.canvas;
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
@@ -418,6 +492,15 @@ function init() {
     console.log('WebGL initialized successfully');
     render();
 }
+
+// Input handling
+window.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+});
+
+window.addEventListener('keyup', (e) => {
+    keys[e.key] = false;
+});
 
 // Start the game
 window.onload = init;
