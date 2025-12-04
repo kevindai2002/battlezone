@@ -326,10 +326,19 @@ function initGeometry() {
     groundBuffer = createBuffers(createGround(50, [0.2, 0.2, 0.2]));
 }
 
+// Check collision between two objects
+function checkCollision(x1, z1, x2, z2, radius1, radius2) {
+    const dx = x1 - x2;
+    const dz = z1 - z2;
+    const distance = Math.sqrt(dx * dx + dz * dz);
+    return distance < (radius1 + radius2);
+}
+
 // Update player based on input
 function updatePlayer(deltaTime) {
     const moveSpeed = 10 * deltaTime;
     const turnSpeed = 2 * deltaTime;
+    const playerRadius = 1.5;
 
     // Rotation
     if (keys['ArrowLeft']) {
@@ -352,9 +361,30 @@ function updatePlayer(deltaTime) {
         newZ -= Math.cos(gameState.player.angle) * moveSpeed;
     }
 
-    // Update position (will add collision detection next)
-    gameState.player.x = newX;
-    gameState.player.z = newZ;
+    // Check collisions with obstacles
+    let collided = false;
+    for (const obstacle of gameState.obstacles) {
+        if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, 2)) {
+            collided = true;
+            break;
+        }
+    }
+
+    // Check collisions with enemies
+    if (!collided) {
+        for (const enemy of gameState.enemies) {
+            if (checkCollision(newX, newZ, enemy.x, enemy.z, playerRadius, 1.5)) {
+                collided = true;
+                break;
+            }
+        }
+    }
+
+    // Update position only if no collision
+    if (!collided) {
+        gameState.player.x = newX;
+        gameState.player.z = newZ;
+    }
 }
 
 // Render scene
