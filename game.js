@@ -14,7 +14,7 @@ const gameState = {
     playerShot: null,
     enemyShots: [],
     enemies: [
-        { x: 20, z: 20, angle: 0, shootTimer: 3 }
+        { x: 0, z: 15, angle: Math.PI, shootTimer: 3 }
     ],
     obstacles: [
         { x: -15, z: 10, type: 'cube' },
@@ -32,6 +32,7 @@ const keys = {};
 
 // Time tracking
 let lastTime = 0;
+let renderCount = 0;
 
 // Alternate mode flag
 let alternateMode = false;
@@ -660,7 +661,13 @@ function render(currentTime) {
     });
 
     // Draw enemy tank
+    if (renderCount === 0) {
+        console.log('First render - drawing', gameState.enemies.length, 'enemies');
+    }
     gameState.enemies.forEach(enemy => {
+        if (renderCount === 0) {
+            console.log('Enemy position:', enemy.x, enemy.z, 'angle:', enemy.angle);
+        }
         const modelMatrix = mat4.multiply(
             mat4.translate(enemy.x, 0.5, enemy.z),
             mat4.multiply(
@@ -670,6 +677,7 @@ function render(currentTime) {
         );
         drawObject(enemyBuffer, modelMatrix, viewMatrix, projectionMatrix);
     });
+    renderCount++;
 
     // Draw player shot
     if (gameState.playerShot) {
@@ -737,6 +745,10 @@ function init() {
     initGeometry();
 
     console.log('WebGL initialized successfully');
+    console.log('Initial game state:');
+    console.log('Player:', gameState.player);
+    console.log('Enemies:', gameState.enemies);
+    console.log('Enemy buffer:', enemyBuffer);
     render();
 }
 
