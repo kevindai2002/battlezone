@@ -338,7 +338,7 @@ function initGeometry() {
         // Normal mode: original colors
         obstacleBuffer = createBuffers(createCube([0.5, 0.5, 0.5]));      // Gray obstacles
         enemyBuffer = createBuffers(createPyramid([1, 0, 0])); // Red enemies
-        playerBuffer = createBuffers(createCube([0, 0, 1])); // Blue player
+        playerBuffer = createBuffers(createCube([0.6, 0.85, 1.0])); // Carolina blue player
         groundBuffer = createBuffers(createGround(50, [0.2, 0.2, 0.2])); // Gray
     }
 }
