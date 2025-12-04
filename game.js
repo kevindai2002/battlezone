@@ -32,6 +32,8 @@ const gameState = {
 let obstacleBuffer, enemyBuffer, groundBuffer, playerBuffer, playerRadarBuffer, enemyRadarBuffer;
 // Alternate mode tank buffers
 let tankBaseBuffer, tankTurretBuffer, tankArrowBuffer, movementArrowBuffer;
+// Alternate mode radar buffers
+let radarGridBuffer, radarPlayerArrowBuffer;
 
 // Input state
 const keys = {};
@@ -398,6 +400,49 @@ function createMovementArrow(color) {
     return { vertices, colors, count: vertices.length / 3 };
 }
 
+// Radar grid: grid lines for alternate mode radar
+function createRadarGrid(color, size, spacing) {
+    const vertices = [];
+    const halfSize = size / 2;
+    
+    // Vertical lines
+    for (let x = -halfSize; x <= halfSize; x += spacing) {
+        vertices.push(x, 0, -halfSize, x, 0, halfSize);
+    }
+    
+    // Horizontal lines
+    for (let z = -halfSize; z <= halfSize; z += spacing) {
+        vertices.push(-halfSize, 0, z, halfSize, 0, z);
+    }
+    
+    const colors = [];
+    for (let i = 0; i < vertices.length / 3; i++) {
+        colors.push(color[0], color[1], color[2]);
+    }
+    
+    return { vertices, colors, count: vertices.length / 3 };
+}
+
+// Radar player triangle: isosceles triangle pointing forward
+function createRadarPlayerTriangle(color) {
+    const base = 0.8;  // Base width of triangle
+    const height = 1.2;  // Height of triangle (pointing forward)
+    
+    const vertices = [
+        // Isosceles triangle pointing in +Z direction
+        // Base vertices (back of triangle)
+        -base/2, 0, 0,  base/2, 0, 0,  0, 0, height,  // Front triangle
+        -base/2, 0, 0,  0, 0, height,  base/2, 0, 0    // Back triangle (same, for double-sided)
+    ];
+    
+    const colors = [];
+    for (let i = 0; i < vertices.length / 3; i++) {
+        colors.push(color[0], color[1], color[2]);
+    }
+    
+    return { vertices, colors, count: vertices.length / 3 };
+}
+
 function createBuffers(geometry) {
     const vertexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
@@ -410,7 +455,7 @@ function createBuffers(geometry) {
     return { vertexBuffer, colorBuffer, count: geometry.count };
 }
 
-function drawObject(buffer, modelMatrix, viewMatrix, projectionMatrix) {
+function drawObject(buffer, modelMatrix, viewMatrix, projectionMatrix, drawMode = gl.TRIANGLES) {
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer.vertexBuffer);
     gl.vertexAttribPointer(shaderProgram.aPosition, 3, gl.FLOAT, false, 0, 0);
 
@@ -421,7 +466,7 @@ function drawObject(buffer, modelMatrix, viewMatrix, projectionMatrix) {
     gl.uniformMatrix4fv(shaderProgram.uViewMatrix, false, viewMatrix);
     gl.uniformMatrix4fv(shaderProgram.uProjectionMatrix, false, projectionMatrix);
 
-    gl.drawArrays(gl.TRIANGLES, 0, buffer.count);
+    gl.drawArrays(drawMode, 0, buffer.count);
 }
 
 // Shader source code
@@ -529,6 +574,12 @@ function initGeometry() {
         tankTurretBuffer = createBuffers(createTankTurret([0.8, 1, 1])); // Light cyan turret
         tankArrowBuffer = createBuffers(createTankArrow([1, 1, 0])); // Yellow arrow pointing forward (base direction)
         movementArrowBuffer = createBuffers(createMovementArrow([1, 0, 0])); // Red arrow pointing in movement direction
+        // Radar geometry for alternate mode
+        radarGridBuffer = createBuffers(createRadarGrid([0.3, 0.0, 0.5], 60, 5)); // Purple grid lines
+        radarPlayerArrowBuffer = createBuffers(createRadarPlayerTriangle([1, 1, 0])); // Yellow triangle for player on radar
+        // Radar geometry for alternate mode
+        radarGridBuffer = createBuffers(createRadarGrid([0.3, 0.0, 0.5], 60, 5)); // Purple grid lines
+        radarPlayerArrowBuffer = createBuffers(createRadarPlayerTriangle([1, 1, 0])); // Yellow triangle for player on radar
     } else {
         // Normal mode: original colors
         obstacleBuffer = createBuffers(createCube([0.5, 0.5, 0.5]));      // Gray obstacles
@@ -1195,37 +1246,56 @@ function render(currentTime) {
     // Draw ground (smaller for radar)
     drawObject(groundBuffer, mat4.identity(), radarView, radarProjection);
 
-    // Draw obstacles on radar
+    if (alternateMode) {
+        // Draw grid for alternate mode radar (as lines)
+        drawObject(radarGridBuffer, mat4.identity(), radarView, radarProjection, gl.LINES);
+    }
+
+    // Draw obstacles on radar (larger icons)
     gameState.obstacles.forEach(obstacle => {
         const modelMatrix = mat4.multiply(
             mat4.translate(obstacle.x, 0.5, obstacle.z),
-            mat4.scale(2, 2, 2)
+            mat4.scale(4, 4, 4) // Increased from 2 to 4
         );
         drawObject(obstacleBuffer, modelMatrix, radarView, radarProjection);
     });
 
-    // Draw enemy on radar
+    // Draw enemy on radar (larger icons)
     gameState.enemies.forEach(enemy => {
         const modelMatrix = mat4.multiply(
             mat4.translate(enemy.x, 0.5, enemy.z),
             mat4.multiply(
                 mat4.rotateY(enemy.angle),
-                mat4.scale(1.5, 1, 1.5)
+                mat4.scale(3, 2, 3) // Increased from 1.5 to 3
             )
         );
         drawObject(enemyRadarBuffer, modelMatrix, radarView, radarProjection);
     });
 
-    // Draw player on radar (only if not dead)
+    // Draw player on radar (only if not dead) (larger icons)
     if (!gameState.player.dead) {
-        const playerModel = mat4.multiply(
-            mat4.translate(gameState.player.x, 0.5, gameState.player.z),
-            mat4.multiply(
-                mat4.rotateY(gameState.player.angle),
-                mat4.scale(1.5, 1, 1.5)
-            )
-        );
-        drawObject(playerRadarBuffer, playerModel, radarView, radarProjection);
+        if (alternateMode) {
+            // Alternate mode: draw player as triangle pointing in camera facing direction
+            // Use cameraYaw (negated to match camera rotation direction)
+            const playerTriangleModel = mat4.multiply(
+                mat4.translate(gameState.player.x, 0.1, gameState.player.z),
+                mat4.multiply(
+                    mat4.rotateY(-cameraYaw),
+                    mat4.scale(4, 2, 4) // Increased from 2 to 4
+                )
+            );
+            drawObject(radarPlayerArrowBuffer, playerTriangleModel, radarView, radarProjection);
+        } else {
+            // Normal mode: draw player as pyramid
+            const playerModel = mat4.multiply(
+                mat4.translate(gameState.player.x, 0.5, gameState.player.z),
+                mat4.multiply(
+                    mat4.rotateY(gameState.player.angle),
+                    mat4.scale(3, 2, 3) // Increased from 1.5 to 3
+                )
+            );
+            drawObject(playerRadarBuffer, playerModel, radarView, radarProjection);
+        }
     }
 
     // Update countdown display
