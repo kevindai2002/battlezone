@@ -591,17 +591,17 @@ function render(currentTime) {
     // Initialize lastTime on first frame
     if (lastTime === 0) {
         lastTime = currentTime;
+        requestAnimationFrame(render);
+        return;
     }
 
     const deltaTime = Math.min(currentTime - lastTime, 0.1); // Cap at 0.1s to prevent large jumps
     lastTime = currentTime;
 
     // Update game state
-    if (deltaTime > 0) {
-        updatePlayer(deltaTime);
-        updateEnemies(deltaTime);
-        updateShots(deltaTime);
-    }
+    updatePlayer(deltaTime);
+    updateEnemies(deltaTime);
+    updateShots(deltaTime);
 
     const canvas = gl.canvas;
 
