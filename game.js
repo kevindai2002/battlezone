@@ -25,7 +25,7 @@ const gameState = {
 };
 
 // Geometry buffers
-let obstacleBuffer, enemyBuffer, groundBuffer, playerBuffer;
+let obstacleBuffer, enemyBuffer, groundBuffer, playerBuffer, playerRadarBuffer, enemyRadarBuffer;
 
 // Input state
 const keys = {};
@@ -332,13 +332,17 @@ function initGeometry() {
         // Alternate mode: neon colors
         obstacleBuffer = createBuffers(createCube([1, 0, 1]));      // Magenta obstacles
         enemyBuffer = createBuffers(createPyramid([0, 1, 1])); // Cyan enemies
-        playerBuffer = createBuffers(createCube([1, 1, 0])); // Yellow player
+        playerBuffer = createBuffers(createCube([1, 1, 0])); // Yellow player (not used in main view)
+        playerRadarBuffer = createBuffers(createPyramid([1, 1, 0])); // Yellow player radar icon
+        enemyRadarBuffer = createBuffers(createPyramid([0, 1, 1])); // Cyan enemy radar icon
         groundBuffer = createBuffers(createGround(50, [0.1, 0.0, 0.2])); // Dark purple
     } else {
         // Normal mode: original colors
         obstacleBuffer = createBuffers(createCube([0.5, 0.5, 0.5]));      // Gray obstacles
         enemyBuffer = createBuffers(createPyramid([1, 0, 0])); // Red enemies
-        playerBuffer = createBuffers(createCube([0.6, 0.85, 1.0])); // Carolina blue player
+        playerBuffer = createBuffers(createCube([0.6, 0.85, 1.0])); // Carolina blue player (not used in main view)
+        playerRadarBuffer = createBuffers(createPyramid([0.6, 0.85, 1.0])); // Carolina blue player radar icon
+        enemyRadarBuffer = createBuffers(createPyramid([1, 0, 0])); // Red enemy radar icon
         groundBuffer = createBuffers(createGround(50, [0.2, 0.2, 0.2])); // Gray
     }
 }
@@ -711,9 +715,12 @@ function render(currentTime) {
     gameState.enemies.forEach(enemy => {
         const modelMatrix = mat4.multiply(
             mat4.translate(enemy.x, 0.5, enemy.z),
-            mat4.scale(1.5, 1, 1.5)
+            mat4.multiply(
+                mat4.rotateY(enemy.angle),
+                mat4.scale(1.5, 1, 1.5)
+            )
         );
-        drawObject(enemyBuffer, modelMatrix, radarView, radarProjection);
+        drawObject(enemyRadarBuffer, modelMatrix, radarView, radarProjection);
     });
 
     // Draw player on radar
@@ -724,7 +731,7 @@ function render(currentTime) {
             mat4.scale(1.5, 1, 1.5)
         )
     );
-    drawObject(playerBuffer, playerModel, radarView, radarProjection);
+    drawObject(playerRadarBuffer, playerModel, radarView, radarProjection);
 
     requestAnimationFrame(render);
 }
