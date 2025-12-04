@@ -523,7 +523,7 @@ function initGeometry() {
         playerBuffer = createBuffers(createCube([1, 1, 0])); // Yellow player (not used in main view)
         playerRadarBuffer = createBuffers(createPyramid([1, 1, 0])); // Yellow player radar icon
         enemyRadarBuffer = createBuffers(createPyramid([0, 1, 1])); // Cyan enemy radar icon
-        groundBuffer = createBuffers(createGround(50, [0.1, 0.0, 0.2])); // Dark purple
+        groundBuffer = createBuffers(createGround(200, [0.1, 0.0, 0.2])); // Dark purple - extended size
         // Tank geometry for alternate mode
         tankBaseBuffer = createBuffers(createTankBase([0, 1, 1])); // Cyan base
         tankTurretBuffer = createBuffers(createTankTurret([0.8, 1, 1])); // Light cyan turret
@@ -536,7 +536,7 @@ function initGeometry() {
         playerBuffer = createBuffers(createCube([0.6, 0.85, 1.0])); // Carolina blue player (not used in main view)
         playerRadarBuffer = createBuffers(createPyramid([0.6, 0.85, 1.0])); // Carolina blue player radar icon
         enemyRadarBuffer = createBuffers(createPyramid([1, 0, 0])); // Red enemy radar icon
-        groundBuffer = createBuffers(createGround(50, [0.2, 0.2, 0.2])); // Gray
+        groundBuffer = createBuffers(createGround(200, [0.2, 0.2, 0.2])); // Gray - extended size
     }
 }
 
@@ -855,7 +855,7 @@ function updatePlayer(deltaTime) {
 // Update shots
 function updateShots(deltaTime) {
     const shotRadius = 0.5;
-    const fieldSize = 50;
+    const fieldSize = 200; // Extended to match larger floor
 
     // Update player shot
     if (gameState.playerShot) {
@@ -1183,8 +1183,14 @@ function render(currentTime) {
     const radarSize = 150;
     gl.viewport(canvas.width - radarSize - 10, canvas.height - radarSize - 10, radarSize, radarSize);
 
+    // Radar view centered on player - player is always at center, map moves around them
     const radarProjection = mat4.ortho(-30, 30, -30, 30, -1, 100);
-    const radarView = mat4.lookAt(0, 50, 0, 0, 0, 0, 0, 0, -1);
+    // Camera looks down at player position (player is at center of radar)
+    const radarView = mat4.lookAt(
+        gameState.player.x, 50, gameState.player.z,  // Camera above player
+        gameState.player.x, 0, gameState.player.z,   // Looking at player
+        0, 0, -1  // Up vector
+    );
 
     // Draw ground (smaller for radar)
     drawObject(groundBuffer, mat4.identity(), radarView, radarProjection);
