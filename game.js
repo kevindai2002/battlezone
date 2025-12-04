@@ -108,6 +108,72 @@ const mat4 = {
     }
 };
 
+// Geometry creation functions
+function createCube(color) {
+    const vertices = [
+        // Front
+        -0.5, -0.5,  0.5,  0.5, -0.5,  0.5,  0.5,  0.5,  0.5,
+        -0.5, -0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5,  0.5,
+        // Back
+        -0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,  0.5, -0.5,
+        -0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5, -0.5, -0.5,
+        // Top
+        -0.5,  0.5, -0.5, -0.5,  0.5,  0.5,  0.5,  0.5,  0.5,
+        -0.5,  0.5, -0.5,  0.5,  0.5,  0.5,  0.5,  0.5, -0.5,
+        // Bottom
+        -0.5, -0.5, -0.5,  0.5, -0.5, -0.5,  0.5, -0.5,  0.5,
+        -0.5, -0.5, -0.5,  0.5, -0.5,  0.5, -0.5, -0.5,  0.5,
+        // Right
+         0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5,  0.5,  0.5,
+         0.5, -0.5, -0.5,  0.5,  0.5,  0.5,  0.5, -0.5,  0.5,
+        // Left
+        -0.5, -0.5, -0.5, -0.5, -0.5,  0.5, -0.5,  0.5,  0.5,
+        -0.5, -0.5, -0.5, -0.5,  0.5,  0.5, -0.5,  0.5, -0.5
+    ];
+
+    const colors = [];
+    for (let i = 0; i < vertices.length / 3; i++) {
+        colors.push(color[0], color[1], color[2]);
+    }
+
+    return { vertices, colors, count: vertices.length / 3 };
+}
+
+function createPyramid(color) {
+    const vertices = [
+        // Base
+        -0.5, 0, -0.5,  0.5, 0, -0.5,  0.5, 0,  0.5,
+        -0.5, 0, -0.5,  0.5, 0,  0.5, -0.5, 0,  0.5,
+        // Front
+        -0.5, 0,  0.5,  0.5, 0,  0.5,  0, 1, 0,
+        // Right
+         0.5, 0,  0.5,  0.5, 0, -0.5,  0, 1, 0,
+        // Back
+         0.5, 0, -0.5, -0.5, 0, -0.5,  0, 1, 0,
+        // Left
+        -0.5, 0, -0.5, -0.5, 0,  0.5,  0, 1, 0
+    ];
+
+    const colors = [];
+    for (let i = 0; i < vertices.length / 3; i++) {
+        colors.push(color[0], color[1], color[2]);
+    }
+
+    return { vertices, colors, count: vertices.length / 3 };
+}
+
+function createBuffers(geometry) {
+    const vertexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(geometry.vertices), gl.STATIC_DRAW);
+
+    const colorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(geometry.colors), gl.STATIC_DRAW);
+
+    return { vertexBuffer, colorBuffer, count: geometry.count };
+}
+
 // Shader source code
 const vertexShaderSource = `
     attribute vec3 aPosition;
