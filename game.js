@@ -26,6 +26,9 @@ let cubeBuffer, pyramidBuffer, groundBuffer;
 // Input state
 const keys = {};
 
+// Time tracking
+let lastTime = 0;
+
 // Matrix Math Utilities
 const mat4 = {
     identity: function() {
@@ -323,8 +326,46 @@ function initGeometry() {
     groundBuffer = createBuffers(createGround(50, [0.2, 0.2, 0.2]));
 }
 
+// Update player based on input
+function updatePlayer(deltaTime) {
+    const moveSpeed = 10 * deltaTime;
+    const turnSpeed = 2 * deltaTime;
+
+    // Rotation
+    if (keys['ArrowLeft']) {
+        gameState.player.angle -= turnSpeed;
+    }
+    if (keys['ArrowRight']) {
+        gameState.player.angle += turnSpeed;
+    }
+
+    // Calculate new position
+    let newX = gameState.player.x;
+    let newZ = gameState.player.z;
+
+    if (keys['ArrowUp']) {
+        newX += Math.sin(gameState.player.angle) * moveSpeed;
+        newZ += Math.cos(gameState.player.angle) * moveSpeed;
+    }
+    if (keys['ArrowDown']) {
+        newX -= Math.sin(gameState.player.angle) * moveSpeed;
+        newZ -= Math.cos(gameState.player.angle) * moveSpeed;
+    }
+
+    // Update position (will add collision detection next)
+    gameState.player.x = newX;
+    gameState.player.z = newZ;
+}
+
 // Render scene
-function render() {
+function render(currentTime) {
+    currentTime *= 0.001; // Convert to seconds
+    const deltaTime = currentTime - lastTime;
+    lastTime = currentTime;
+
+    // Update game state
+    updatePlayer(deltaTime);
+
     const canvas = gl.canvas;
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
