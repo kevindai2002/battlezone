@@ -25,7 +25,7 @@ const gameState = {
 };
 
 // Geometry buffers
-let cubeBuffer, pyramidBuffer, groundBuffer;
+let obstacleBuffer, enemyBuffer, groundBuffer;
 
 // Input state
 const keys = {};
@@ -330,13 +330,13 @@ function initShaders() {
 function initGeometry() {
     if (alternateMode) {
         // Alternate mode: neon colors
-        cubeBuffer = createBuffers(createCube([1, 0, 1]));      // Magenta
-        pyramidBuffer = createBuffers(createPyramid([0, 1, 1])); // Cyan
+        obstacleBuffer = createBuffers(createCube([1, 0, 1]));      // Magenta obstacles
+        enemyBuffer = createBuffers(createCube([0, 1, 1])); // Cyan enemies
         groundBuffer = createBuffers(createGround(50, [0.1, 0.0, 0.2])); // Dark purple
     } else {
         // Normal mode: original colors
-        cubeBuffer = createBuffers(createCube([0, 1, 0]));      // Green
-        pyramidBuffer = createBuffers(createPyramid([1, 0, 0])); // Red
+        obstacleBuffer = createBuffers(createCube([0.5, 0.5, 0.5]));      // Gray obstacles
+        enemyBuffer = createBuffers(createCube([1, 0, 0])); // Red enemies
         groundBuffer = createBuffers(createGround(50, [0.2, 0.2, 0.2])); // Gray
     }
 }
@@ -640,8 +640,7 @@ function render(currentTime) {
             mat4.translate(obstacle.x, 0.5, obstacle.z),
             mat4.scale(2, 2, 2)
         );
-        const buffer = obstacle.type === 'cube' ? cubeBuffer : pyramidBuffer;
-        drawObject(buffer, modelMatrix, viewMatrix, projectionMatrix);
+        drawObject(obstacleBuffer, modelMatrix, viewMatrix, projectionMatrix);
     });
 
     // Draw enemy tank
@@ -653,7 +652,7 @@ function render(currentTime) {
                 mat4.scale(1.5, 1, 1.5)
             )
         );
-        drawObject(pyramidBuffer, modelMatrix, viewMatrix, projectionMatrix);
+        drawObject(enemyBuffer, modelMatrix, viewMatrix, projectionMatrix);
     });
 
     // Draw player shot
@@ -662,7 +661,7 @@ function render(currentTime) {
             mat4.translate(gameState.playerShot.x, 0.5, gameState.playerShot.z),
             mat4.scale(0.5, 0.5, 0.5)
         );
-        drawObject(cubeBuffer, modelMatrix, viewMatrix, projectionMatrix);
+        drawObject(obstacleBuffer, modelMatrix, viewMatrix, projectionMatrix);
     }
 
     // Draw enemy shots
@@ -671,7 +670,7 @@ function render(currentTime) {
             mat4.translate(shot.x, 0.5, shot.z),
             mat4.scale(0.5, 0.5, 0.5)
         );
-        drawObject(cubeBuffer, modelMatrix, viewMatrix, projectionMatrix);
+        drawObject(obstacleBuffer, modelMatrix, viewMatrix, projectionMatrix);
     });
 
     // === RADAR VIEW (Orthographic top-down) ===
@@ -690,8 +689,7 @@ function render(currentTime) {
             mat4.translate(obstacle.x, 0.5, obstacle.z),
             mat4.scale(2, 2, 2)
         );
-        const buffer = obstacle.type === 'cube' ? cubeBuffer : pyramidBuffer;
-        drawObject(buffer, modelMatrix, radarView, radarProjection);
+        drawObject(obstacleBuffer, modelMatrix, radarView, radarProjection);
     });
 
     // Draw enemy on radar
@@ -700,7 +698,7 @@ function render(currentTime) {
             mat4.translate(enemy.x, 0.5, enemy.z),
             mat4.scale(1.5, 1, 1.5)
         );
-        drawObject(pyramidBuffer, modelMatrix, radarView, radarProjection);
+        drawObject(enemyBuffer, modelMatrix, radarView, radarProjection);
     });
 
     // Draw player on radar
@@ -711,7 +709,7 @@ function render(currentTime) {
             mat4.scale(1.5, 1, 1.5)
         )
     );
-    drawObject(pyramidBuffer, playerModel, radarView, radarProjection);
+    drawObject(enemyBuffer, playerModel, radarView, radarProjection);
 
     requestAnimationFrame(render);
 }
