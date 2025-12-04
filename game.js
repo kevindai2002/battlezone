@@ -376,12 +376,19 @@ function updateEnemies(deltaTime) {
             while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
             while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
 
-            // Turn toward player at fixed speed (like player controls)
-            // Turn left or right at fixed speed
-            if (angleDiff > 0) {
-                enemy.angle += enemyTurnSpeed;
+            // Add random variation to movement (20% chance to turn randomly)
+            if (Math.random() < 0.2) {
+                // Random turn left or right
+                const randomTurn = (Math.random() - 0.5) * enemyTurnSpeed * 2;
+                enemy.angle += randomTurn;
             } else {
-                enemy.angle -= enemyTurnSpeed;
+                // Turn toward player at fixed speed (like player controls)
+                // Turn left or right at fixed speed
+                if (angleDiff > 0) {
+                    enemy.angle += enemyTurnSpeed;
+                } else {
+                    enemy.angle -= enemyTurnSpeed;
+                }
             }
 
             // Always move forward in the direction facing
