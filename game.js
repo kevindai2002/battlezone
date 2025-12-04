@@ -2,6 +2,27 @@
 let gl;
 let shaderProgram;
 
+// Game state
+const gameState = {
+    player: {
+        x: 0,
+        z: 0,
+        angle: 0
+    },
+    enemies: [
+        { x: 20, z: 20, angle: 0 }
+    ],
+    obstacles: [
+        { x: -15, z: 10, type: 'cube' },
+        { x: 10, z: -15, type: 'pyramid' },
+        { x: -10, z: -10, type: 'cube' },
+        { x: 15, z: 15, type: 'pyramid' }
+    ]
+};
+
+// Geometry buffers
+let cubeBuffer, pyramidBuffer, groundBuffer;
+
 // Matrix Math Utilities
 const mat4 = {
     identity: function() {
@@ -162,6 +183,20 @@ function createPyramid(color) {
     return { vertices, colors, count: vertices.length / 3 };
 }
 
+function createGround(size, color) {
+    const vertices = [
+        -size, 0, -size,  size, 0, -size,  size, 0,  size,
+        -size, 0, -size,  size, 0,  size, -size, 0,  size
+    ];
+
+    const colors = [];
+    for (let i = 0; i < vertices.length / 3; i++) {
+        colors.push(color[0], color[1], color[2]);
+    }
+
+    return { vertices, colors, count: vertices.length / 3 };
+}
+
 function createBuffers(geometry) {
     const vertexBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
@@ -172,6 +207,20 @@ function createBuffers(geometry) {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(geometry.colors), gl.STATIC_DRAW);
 
     return { vertexBuffer, colorBuffer, count: geometry.count };
+}
+
+function drawObject(buffer, modelMatrix, viewMatrix, projectionMatrix) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer.vertexBuffer);
+    gl.vertexAttribPointer(shaderProgram.aPosition, 3, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer.colorBuffer);
+    gl.vertexAttribPointer(shaderProgram.aColor, 3, gl.FLOAT, false, 0, 0);
+
+    gl.uniformMatrix4fv(shaderProgram.uModelMatrix, false, modelMatrix);
+    gl.uniformMatrix4fv(shaderProgram.uViewMatrix, false, viewMatrix);
+    gl.uniformMatrix4fv(shaderProgram.uProjectionMatrix, false, projectionMatrix);
+
+    gl.drawArrays(gl.TRIANGLES, 0, buffer.count);
 }
 
 // Shader source code
@@ -264,12 +313,69 @@ function initShaders() {
     return true;
 }
 
+// Initialize geometry
+function initGeometry() {
+    cubeBuffer = createBuffers(createCube([0, 1, 0]));
+    pyramidBuffer = createBuffers(createPyramid([1, 0, 0]));
+    groundBuffer = createBuffers(createGround(50, [0.2, 0.2, 0.2]));
+}
+
+// Render scene
+function render() {
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // Perspective projection for main view
+    const canvas = gl.canvas;
+    const aspect = canvas.width / canvas.height;
+    const projectionMatrix = mat4.perspective(Math.PI / 3, aspect, 0.1, 100.0);
+
+    // View matrix (camera behind and above player tank)
+    const eyeX = gameState.player.x - Math.sin(gameState.player.angle) * 2;
+    const eyeZ = gameState.player.z - Math.cos(gameState.player.angle) * 2;
+    const centerX = gameState.player.x + Math.sin(gameState.player.angle) * 10;
+    const centerZ = gameState.player.z + Math.cos(gameState.player.angle) * 10;
+    const viewMatrix = mat4.lookAt(
+        eyeX, 1.5, eyeZ,
+        centerX, 1, centerZ,
+        0, 1, 0
+    );
+
+    // Draw ground
+    drawObject(groundBuffer, mat4.identity(), viewMatrix, projectionMatrix);
+
+    // Draw obstacles
+    gameState.obstacles.forEach(obstacle => {
+        const modelMatrix = mat4.multiply(
+            mat4.translate(obstacle.x, 0.5, obstacle.z),
+            mat4.scale(2, 2, 2)
+        );
+        const buffer = obstacle.type === 'cube' ? cubeBuffer : pyramidBuffer;
+        drawObject(buffer, modelMatrix, viewMatrix, projectionMatrix);
+    });
+
+    // Draw enemy tank
+    gameState.enemies.forEach(enemy => {
+        const modelMatrix = mat4.multiply(
+            mat4.translate(enemy.x, 0.5, enemy.z),
+            mat4.multiply(
+                mat4.rotateY(enemy.angle),
+                mat4.scale(1.5, 1, 1.5)
+            )
+        );
+        drawObject(pyramidBuffer, modelMatrix, viewMatrix, projectionMatrix);
+    });
+
+    requestAnimationFrame(render);
+}
+
 // Main initialization
 function init() {
     if (!initWebGL()) return;
     if (!initShaders()) return;
+    initGeometry();
 
     console.log('WebGL initialized successfully');
+    render();
 }
 
 // Start the game
