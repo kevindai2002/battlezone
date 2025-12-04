@@ -33,6 +33,9 @@ const keys = {};
 // Time tracking
 let lastTime = 0;
 
+// Alternate mode flag
+let alternateMode = false;
+
 // Matrix Math Utilities
 const mat4 = {
     identity: function() {
@@ -325,9 +328,17 @@ function initShaders() {
 
 // Initialize geometry
 function initGeometry() {
-    cubeBuffer = createBuffers(createCube([0, 1, 0]));
-    pyramidBuffer = createBuffers(createPyramid([1, 0, 0]));
-    groundBuffer = createBuffers(createGround(50, [0.2, 0.2, 0.2]));
+    if (alternateMode) {
+        // Alternate mode: neon colors
+        cubeBuffer = createBuffers(createCube([1, 0, 1]));      // Magenta
+        pyramidBuffer = createBuffers(createPyramid([0, 1, 1])); // Cyan
+        groundBuffer = createBuffers(createGround(50, [0.1, 0.0, 0.2])); // Dark purple
+    } else {
+        // Normal mode: original colors
+        cubeBuffer = createBuffers(createCube([0, 1, 0]));      // Green
+        pyramidBuffer = createBuffers(createPyramid([1, 0, 0])); // Red
+        groundBuffer = createBuffers(createGround(50, [0.2, 0.2, 0.2])); // Gray
+    }
 }
 
 // Check collision between two objects
@@ -585,6 +596,14 @@ function render(currentTime) {
     updateShots(deltaTime);
 
     const canvas = gl.canvas;
+
+    // Set background color based on mode
+    if (alternateMode) {
+        gl.clearColor(0.05, 0.0, 0.1, 1.0); // Dark purple
+    } else {
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Black
+    }
+
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     // === MAIN VIEW (Perspective) ===
@@ -702,6 +721,20 @@ function init() {
 // Input handling
 window.addEventListener('keydown', (e) => {
     keys[e.key] = true;
+
+    // Toggle alternate mode with '!'
+    if (e.key === '!') {
+        alternateMode = !alternateMode;
+        // Recreate geometry with new colors
+        initGeometry();
+        // Update crosshair color
+        const crosshair = document.getElementById('crosshair');
+        if (alternateMode) {
+            crosshair.style.setProperty('--crosshair-color', '#f0f');
+        } else {
+            crosshair.style.setProperty('--crosshair-color', '#0f0');
+        }
+    }
 });
 
 window.addEventListener('keyup', (e) => {

@@ -29,11 +29,14 @@
             height: 40px;
             pointer-events: none;
         }
+        :root {
+            --crosshair-color: #0f0;
+        }
         #crosshair::before,
         #crosshair::after {
             content: '';
             position: absolute;
-            background: #0f0;
+            background: var(--crosshair-color);
         }
         #crosshair::before {
             top: 50%;
