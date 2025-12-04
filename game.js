@@ -433,10 +433,10 @@ function updatePlayer(deltaTime) {
 
     // Rotation
     if (keys['ArrowLeft']) {
-        gameState.player.angle -= turnSpeed;
+        gameState.player.angle += turnSpeed;
     }
     if (keys['ArrowRight']) {
-        gameState.player.angle += turnSpeed;
+        gameState.player.angle -= turnSpeed;
     }
 
     // Calculate new position
