@@ -2,6 +2,112 @@
 let gl;
 let shaderProgram;
 
+// Matrix Math Utilities
+const mat4 = {
+    identity: function() {
+        return [
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1
+        ];
+    },
+
+    perspective: function(fov, aspect, near, far) {
+        const f = 1.0 / Math.tan(fov / 2);
+        const nf = 1 / (near - far);
+        return [
+            f / aspect, 0, 0, 0,
+            0, f, 0, 0,
+            0, 0, (far + near) * nf, -1,
+            0, 0, 2 * far * near * nf, 0
+        ];
+    },
+
+    ortho: function(left, right, bottom, top, near, far) {
+        const lr = 1 / (left - right);
+        const bt = 1 / (bottom - top);
+        const nf = 1 / (near - far);
+        return [
+            -2 * lr, 0, 0, 0,
+            0, -2 * bt, 0, 0,
+            0, 0, 2 * nf, 0,
+            (left + right) * lr, (top + bottom) * bt, (far + near) * nf, 1
+        ];
+    },
+
+    translate: function(x, y, z) {
+        return [
+            1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            x, y, z, 1
+        ];
+    },
+
+    rotateY: function(angle) {
+        const c = Math.cos(angle);
+        const s = Math.sin(angle);
+        return [
+            c, 0, s, 0,
+            0, 1, 0, 0,
+            -s, 0, c, 0,
+            0, 0, 0, 1
+        ];
+    },
+
+    scale: function(x, y, z) {
+        return [
+            x, 0, 0, 0,
+            0, y, 0, 0,
+            0, 0, z, 0,
+            0, 0, 0, 1
+        ];
+    },
+
+    multiply: function(a, b) {
+        const result = [];
+        for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < 4; j++) {
+                let sum = 0;
+                for (let k = 0; k < 4; k++) {
+                    sum += a[i + k * 4] * b[k + j * 4];
+                }
+                result[i + j * 4] = sum;
+            }
+        }
+        return result;
+    },
+
+    lookAt: function(eyeX, eyeY, eyeZ, centerX, centerY, centerZ, upX, upY, upZ) {
+        let zx = eyeX - centerX;
+        let zy = eyeY - centerY;
+        let zz = eyeZ - centerZ;
+        let zlen = Math.sqrt(zx*zx + zy*zy + zz*zz);
+        zx /= zlen; zy /= zlen; zz /= zlen;
+
+        let xx = upY * zz - upZ * zy;
+        let xy = upZ * zx - upX * zz;
+        let xz = upX * zy - upY * zx;
+        let xlen = Math.sqrt(xx*xx + xy*xy + xz*xz);
+        xx /= xlen; xy /= xlen; xz /= xlen;
+
+        const yx = zy * xz - zz * xy;
+        const yy = zz * xx - zx * xz;
+        const yz = zx * xy - zy * xx;
+
+        return [
+            xx, yx, zx, 0,
+            xy, yy, zy, 0,
+            xz, yz, zz, 0,
+            -(xx * eyeX + xy * eyeY + xz * eyeZ),
+            -(yx * eyeX + yy * eyeY + yz * eyeZ),
+            -(zx * eyeX + zy * eyeY + zz * eyeZ),
+            1
+        ];
+    }
+};
+
 // Shader source code
 const vertexShaderSource = `
     attribute vec3 aPosition;
