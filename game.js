@@ -322,10 +322,12 @@ function initGeometry() {
 
 // Render scene
 function render() {
+    const canvas = gl.canvas;
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    // Perspective projection for main view
-    const canvas = gl.canvas;
+    // === MAIN VIEW (Perspective) ===
+    gl.viewport(0, 0, canvas.width, canvas.height);
+
     const aspect = canvas.width / canvas.height;
     const projectionMatrix = mat4.perspective(Math.PI / 3, aspect, 0.1, 100.0);
 
@@ -364,6 +366,45 @@ function render() {
         );
         drawObject(pyramidBuffer, modelMatrix, viewMatrix, projectionMatrix);
     });
+
+    // === RADAR VIEW (Orthographic top-down) ===
+    const radarSize = 150;
+    gl.viewport(canvas.width - radarSize - 10, canvas.height - radarSize - 10, radarSize, radarSize);
+
+    const radarProjection = mat4.ortho(-30, 30, -30, 30, -1, 100);
+    const radarView = mat4.lookAt(0, 50, 0, 0, 0, 0, 0, 0, -1);
+
+    // Draw ground (smaller for radar)
+    drawObject(groundBuffer, mat4.identity(), radarView, radarProjection);
+
+    // Draw obstacles on radar
+    gameState.obstacles.forEach(obstacle => {
+        const modelMatrix = mat4.multiply(
+            mat4.translate(obstacle.x, 0.5, obstacle.z),
+            mat4.scale(2, 2, 2)
+        );
+        const buffer = obstacle.type === 'cube' ? cubeBuffer : pyramidBuffer;
+        drawObject(buffer, modelMatrix, radarView, radarProjection);
+    });
+
+    // Draw enemy on radar
+    gameState.enemies.forEach(enemy => {
+        const modelMatrix = mat4.multiply(
+            mat4.translate(enemy.x, 0.5, enemy.z),
+            mat4.scale(1.5, 1, 1.5)
+        );
+        drawObject(pyramidBuffer, modelMatrix, radarView, radarProjection);
+    });
+
+    // Draw player on radar
+    const playerModel = mat4.multiply(
+        mat4.translate(gameState.player.x, 0.5, gameState.player.z),
+        mat4.multiply(
+            mat4.rotateY(gameState.player.angle),
+            mat4.scale(1.5, 1, 1.5)
+        )
+    );
+    drawObject(pyramidBuffer, playerModel, radarView, radarProjection);
 
     requestAnimationFrame(render);
 }
