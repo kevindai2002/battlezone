@@ -367,6 +367,28 @@ function updateEnemies(deltaTime) {
         const distanceToPlayer = Math.sqrt(dx * dx + dz * dz);
 
         if (distanceToPlayer > 0) {
+            // Check for obstacles ahead
+            const lookAheadDist = 5;
+            const lookAheadX = enemy.x + Math.sin(enemy.angle) * lookAheadDist;
+            const lookAheadZ = enemy.z + Math.cos(enemy.angle) * lookAheadDist;
+
+            let obstacleAhead = false;
+            let avoidLeft = false;
+
+            // Check if obstacle is in front
+            for (const obstacle of gameState.obstacles) {
+                if (checkCollision(lookAheadX, lookAheadZ, obstacle.x, obstacle.z, 1.5, 3)) {
+                    obstacleAhead = true;
+                    // Determine which way to turn to avoid
+                    const obstacleAngle = Math.atan2(obstacle.x - enemy.x, obstacle.z - enemy.z);
+                    let angleDiffToObstacle = obstacleAngle - enemy.angle;
+                    while (angleDiffToObstacle > Math.PI) angleDiffToObstacle -= 2 * Math.PI;
+                    while (angleDiffToObstacle < -Math.PI) angleDiffToObstacle += 2 * Math.PI;
+                    avoidLeft = angleDiffToObstacle > 0;
+                    break;
+                }
+            }
+
             // Calculate target angle to player
             const targetAngle = Math.atan2(dx, dz);
 
@@ -376,14 +398,20 @@ function updateEnemies(deltaTime) {
             while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
             while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
 
-            // Add random variation to movement (20% chance to turn randomly)
-            if (Math.random() < 0.2) {
-                // Random turn left or right
-                const randomTurn = (Math.random() - 0.5) * enemyTurnSpeed * 2;
+            // Decide on movement
+            if (obstacleAhead) {
+                // Avoid obstacle by turning away
+                if (avoidLeft) {
+                    enemy.angle -= enemyTurnSpeed * 1.5;
+                } else {
+                    enemy.angle += enemyTurnSpeed * 1.5;
+                }
+            } else if (Math.random() < 0.4) {
+                // Increased random variation (40% chance to turn randomly)
+                const randomTurn = (Math.random() - 0.5) * enemyTurnSpeed * 3;
                 enemy.angle += randomTurn;
             } else {
-                // Turn toward player at fixed speed (like player controls)
-                // Turn left or right at fixed speed
+                // Turn toward player at fixed speed
                 if (angleDiff > 0) {
                     enemy.angle += enemyTurnSpeed;
                 } else {
