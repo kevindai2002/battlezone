@@ -339,8 +339,6 @@ function initGeometry() {
         enemyBuffer = createBuffers(createCube([1, 0, 0])); // Red enemies
         groundBuffer = createBuffers(createGround(50, [0.2, 0.2, 0.2])); // Gray
     }
-    console.log('Geometry initialized. Enemy count:', gameState.enemies.length);
-    console.log('Enemies:', gameState.enemies);
 }
 
 // Check collision between two objects
@@ -427,7 +425,9 @@ function updateEnemies(deltaTime) {
         // Handle shooting
         enemy.shootTimer -= deltaTime;
         if (enemy.shootTimer <= 0) {
-            // Shoot toward player
+            // Calculate angle to player for shooting
+            const dx = gameState.player.x - enemy.x;
+            const dz = gameState.player.z - enemy.z;
             const angleToPlayer = Math.atan2(dx, dz);
             gameState.enemyShots.push({
                 x: enemy.x,
@@ -660,9 +660,7 @@ function render(currentTime) {
     });
 
     // Draw enemy tank
-    console.log('Rendering', gameState.enemies.length, 'enemies');
     gameState.enemies.forEach(enemy => {
-        console.log('Drawing enemy at:', enemy.x, enemy.z);
         const modelMatrix = mat4.multiply(
             mat4.translate(enemy.x, 0.5, enemy.z),
             mat4.multiply(
