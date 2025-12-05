@@ -13,7 +13,9 @@ const gameState = {
         dead: false,
         deadTime: 0,
         invulnerable: false,
-        invulnerableTime: 0
+        invulnerableTime: 0,
+        health: 150,
+        maxHealth: 150
     },
     playerShot: null,
     enemyShots: [],
@@ -21,10 +23,14 @@ const gameState = {
         { x: 20, z: 20, angle: 0, turretAngle: 0, shootTimer: 3 }
     ],
     obstacles: [], // Will be generated randomly
+    healthPickups: [], // Health pickup items
     score: 0,
     wave: 1,
     enemiesKilledThisWave: 0,
-    enemiesPerWave: 1 // Starting with 1 enemy
+    enemiesPerWave: 1, // Starting with 1 enemy
+    lives: 3,
+    gameOver: false,
+    gameStarted: false
 };
 
 // Geometry buffers
@@ -44,7 +50,7 @@ const keys = {};
 let lastTime = 0;
 
 // Alternate mode flag
-let alternateMode = true; // Set to true for testing
+let alternateMode = false; // Normal mode is default
 
 // Camera angles for alternate mode
 let cameraYaw = 0;   // Horizontal rotation (left/right)
@@ -52,10 +58,19 @@ let cameraPitch = 0; // Vertical rotation (up/down)
 const maxPitch = Math.PI / 3; // Limit pitch to 60 degrees up/down
 const cameraRotateSpeed = 2.0; // Camera rotation speed with arrow keys
 
+// High score (persisted in localStorage)
+let highScore = 0;
+
 // UI elements
 let countdownElement;
 let invulnerableElement;
 let scoreElement;
+let healthFillElement;
+let healthTextElement;
+let gameOverElement;
+let startScreenElement;
+let startButtonElement;
+let restartButtonElement;
 
 // Matrix Math Utilities
 const mat4 = {
@@ -291,6 +306,37 @@ function createGround(size, color) {
     const vertices = [
         -size, 0, -size,  size, 0, -size,  size, 0,  size,
         -size, 0, -size,  size, 0,  size, -size, 0,  size
+    ];
+
+    const colors = [];
+    for (let i = 0; i < vertices.length / 3; i++) {
+        colors.push(color[0], color[1], color[2]);
+    }
+
+    return { vertices, colors, count: vertices.length / 3 };
+}
+
+function createHeart(color) {
+    // Simple heart shape using a rotated cube/diamond
+    const vertices = [
+        // Front face
+        0, 0.5, 0.3,   -0.3, 0, 0.3,   0.3, 0, 0.3,
+        // Back face
+        0, 0.5, -0.3,   0.3, 0, -0.3,   -0.3, 0, -0.3,
+        // Left face
+        0, 0.5, 0.3,   -0.3, 0, 0.3,   -0.3, 0, -0.3,
+        0, 0.5, 0.3,   -0.3, 0, -0.3,   0, 0.5, -0.3,
+        // Right face
+        0, 0.5, 0.3,   0.3, 0, -0.3,   0.3, 0, 0.3,
+        0, 0.5, 0.3,   0, 0.5, -0.3,   0.3, 0, -0.3,
+        // Bottom left
+        -0.3, 0, 0.3,   0, -0.5, 0,   -0.3, 0, -0.3,
+        // Bottom right
+        0.3, 0, 0.3,   0.3, 0, -0.3,   0, -0.5, 0,
+        // Bottom front
+        -0.3, 0, 0.3,   0.3, 0, 0.3,   0, -0.5, 0,
+        // Bottom back
+        0.3, 0, -0.3,   -0.3, 0, -0.3,   0, -0.5, 0
     ];
 
     const colors = [];
@@ -749,6 +795,8 @@ function initGeometry() {
         shotBuffer = createBuffers(createSphere([1, 1, 0])); // Yellow shots
         // Wall geometry for alternate mode
         wallBuffer = createBuffers(createWall(90, 5, 1, [0.3, 0.0, 0.5])); // Purple walls
+        // Health pickup geometry for alternate mode
+        heartBuffer = createBuffers(createHeart([1, 0, 1])); // Magenta hearts
     } else {
         // Normal mode: original colors
         obstacleBuffer = createBuffers(createCube([0.5, 0.5, 0.5]));      // Gray obstacles
@@ -759,6 +807,8 @@ function initGeometry() {
         groundBuffer = createBuffers(createGround(200, [0.2, 0.2, 0.2])); // Gray - extended size
         // Wall geometry for normal mode
         wallBuffer = createBuffers(createWall(90, 5, 1, [0.4, 0.4, 0.4])); // Gray walls
+        // Health pickup geometry for normal mode
+        heartBuffer = createBuffers(createHeart([1, 0, 0.5])); // Pink hearts
     }
 }
 
@@ -946,6 +996,7 @@ function updatePlayer(deltaTime) {
             gameState.player.dead = false;
             gameState.player.invulnerable = true;
             gameState.player.invulnerableTime = 5;
+            gameState.player.health = gameState.player.maxHealth; // Restore full health on respawn
         }
         return; // Player cannot move while dead
     }
@@ -1094,16 +1145,34 @@ function updatePlayer(deltaTime) {
     }
 
     // Handle invulnerability
+    if (gameState.player.invulnerable) {
+        gameState.player.invulnerableTime -= deltaTime;
+        if (gameState.player.invulnerableTime <= 0) {
+            gameState.player.invulnerable = false;
+        }
+    }
+
+    // Check health pickup collisions (only in alternate mode)
     if (alternateMode) {
-        // For testing: always invulnerable in alternate mode
-        gameState.player.invulnerable = true;
-        gameState.player.invulnerableTime = 999; // Keep it high
-    } else {
-        // Normal mode: original invulnerability logic
-        if (gameState.player.invulnerable) {
-            gameState.player.invulnerableTime -= deltaTime;
-            if (gameState.player.invulnerableTime <= 0) {
-                gameState.player.invulnerable = false;
+        for (let i = gameState.healthPickups.length - 1; i >= 0; i--) {
+            const pickup = gameState.healthPickups[i];
+            const pickupRadius = 0.8; // Collision radius for heart
+            if (checkCollision(gameState.player.x, gameState.player.z, pickup.x, pickup.z, 1.5, pickupRadius)) {
+                // Remove the pickup
+                gameState.healthPickups.splice(i, 1);
+
+                // 50% chance to heal or boost max health
+                if (Math.random() < 0.5) {
+                    // Heal 20 health (capped at max)
+                    gameState.player.health = Math.min(gameState.player.health + 20, gameState.player.maxHealth);
+                } else {
+                    // Boost max health by 20 and heal to new max
+                    gameState.player.maxHealth += 20;
+                    gameState.player.health = gameState.player.maxHealth;
+                }
+
+                // Spawn a new health pickup to replace the collected one
+                spawnHealthPickup();
             }
         }
     }
@@ -1146,23 +1215,29 @@ function updateShots(deltaTime) {
                         gameState.playerShot = null;
                         gameState.enemies.splice(i, 1);
 
-                        // Update score (1 point per enemy * wave multiplier)
-                        gameState.score += 1 * gameState.wave;
-                        gameState.enemiesKilledThisWave++;
+                        if (alternateMode) {
+                            // Alternate mode: score and wave system
+                            // Update score (1 point per enemy * wave multiplier)
+                            gameState.score += 1 * gameState.wave;
+                            gameState.enemiesKilledThisWave++;
 
-                        // Check if wave is complete
-                        if (gameState.enemiesKilledThisWave >= gameState.enemiesPerWave) {
-                            // Start next wave
-                            gameState.wave++;
-                            gameState.enemiesPerWave = gameState.wave; // Each wave has wave number of enemies
-                            gameState.enemiesKilledThisWave = 0;
+                            // Check if wave is complete
+                            if (gameState.enemiesKilledThisWave >= gameState.enemiesPerWave) {
+                                // Start next wave
+                                gameState.wave++;
+                                gameState.enemiesPerWave = gameState.wave; // Each wave has wave number of enemies
+                                gameState.enemiesKilledThisWave = 0;
 
-                            // Spawn all enemies for new wave
-                            for (let j = 0; j < gameState.enemiesPerWave; j++) {
+                                // Spawn all enemies for new wave
+                                for (let j = 0; j < gameState.enemiesPerWave; j++) {
+                                    spawnEnemy();
+                                }
+                            } else {
+                                // Spawn replacement enemy for current wave
                                 spawnEnemy();
                             }
                         } else {
-                            // Spawn replacement enemy for current wave
+                            // Normal mode: just respawn one enemy
                             spawnEnemy();
                         }
                         break;
@@ -1201,9 +1276,28 @@ function updateShots(deltaTime) {
         if (!gameState.player.invulnerable && !gameState.player.dead &&
             checkCollision(shot.x, shot.z, gameState.player.x, gameState.player.z, shotRadius, 1.5)) {
             gameState.enemyShots.splice(i, 1);
-            // Player dies - enter dead state for 3 seconds, then invulnerable for 5 seconds
-            // Skip death in alternate mode (testing)
-            if (!alternateMode) {
+
+            if (alternateMode) {
+                // Alternate mode: health system with damage based on wave and lives
+                const damage = 30 + (gameState.wave - 1) * 10;
+                gameState.player.health -= damage;
+                if (gameState.player.health <= 0) {
+                    // Player dies - lose a life
+                    gameState.lives--;
+                    if (gameState.lives <= 0) {
+                        // Game over - update high score
+                        gameState.gameOver = true;
+                        gameState.player.health = 0;
+                        updateHighScore(gameState.score);
+                    } else {
+                        // Enter dead state for 3 seconds, then respawn with invulnerability
+                        gameState.player.dead = true;
+                        gameState.player.deadTime = 3;
+                        gameState.player.health = 0;
+                    }
+                }
+            } else {
+                // Normal mode: instant death, respawn immediately (no lives/game over)
                 gameState.player.dead = true;
                 gameState.player.deadTime = 3;
             }
@@ -1240,10 +1334,12 @@ function render(currentTime) {
     const deltaTime = Math.min(currentTime - lastTime, 0.1); // Cap at 0.1s to prevent large jumps
     lastTime = currentTime;
 
-    // Update game state
-    updatePlayer(deltaTime);
-    updateEnemies(deltaTime);
-    updateShots(deltaTime);
+    // Update game state only if game started and not game over
+    if (gameState.gameStarted && !gameState.gameOver) {
+        updatePlayer(deltaTime);
+        updateEnemies(deltaTime);
+        updateShots(deltaTime);
+    }
 
     const canvas = gl.canvas;
 
@@ -1360,6 +1456,20 @@ function render(currentTime) {
         );
         drawObject(obstacleBuffer, modelMatrix, viewMatrix, projectionMatrix);
     });
+
+    // Draw health pickups (only in alternate mode)
+    if (alternateMode) {
+        gameState.healthPickups.forEach(pickup => {
+            const modelMatrix = mat4.multiply(
+                mat4.translate(pickup.x, 1.5, pickup.z), // Elevated above ground
+                mat4.multiply(
+                    mat4.rotateY(pickup.rotation + currentTime * 2), // Rotating animation
+                    mat4.scale(1.2, 1.2, 1.2)
+                )
+            );
+            drawObject(heartBuffer, modelMatrix, viewMatrix, projectionMatrix);
+        });
+    }
 
     if (alternateMode) {
         // Draw player tank (base + turret)
@@ -1529,6 +1639,17 @@ function render(currentTime) {
         drawObject(obstacleBuffer, modelMatrix, radarView, radarProjection);
     });
 
+    // Draw health pickups on radar (only in alternate mode)
+    if (alternateMode) {
+        gameState.healthPickups.forEach(pickup => {
+            const modelMatrix = mat4.multiply(
+                mat4.translate(pickup.x, 0.5, pickup.z),
+                mat4.scale(2, 2, 2) // Larger for visibility on radar
+            );
+            drawObject(heartBuffer, modelMatrix, radarView, radarProjection);
+        });
+    }
+
     // Draw enemy on radar (larger icons)
     gameState.enemies.forEach(enemy => {
         const modelMatrix = mat4.multiply(
@@ -1567,23 +1688,60 @@ function render(currentTime) {
         }
     }
 
-    // Update countdown display
-    if (gameState.player.dead && gameState.player.deadTime > 0) {
-        countdownElement.style.display = 'block';
-        countdownElement.textContent = Math.ceil(gameState.player.deadTime);
-        invulnerableElement.style.display = 'none';
-    } else if (gameState.player.invulnerable && gameState.player.invulnerableTime > 0) {
-        countdownElement.style.display = 'none';
-        invulnerableElement.style.display = 'block';
-        invulnerableElement.textContent = 'INVULNERABLE\n' + Math.ceil(gameState.player.invulnerableTime);
+    // Update UI displays
+    if (!gameState.gameStarted && alternateMode) {
+        // Show start screen (only in alternate mode)
+        if (startScreenElement) startScreenElement.style.display = 'block';
+        if (gameOverElement) gameOverElement.style.display = 'none';
+        if (countdownElement) countdownElement.style.display = 'none';
+        if (invulnerableElement) invulnerableElement.style.display = 'none';
+    } else if (gameState.gameOver && alternateMode) {
+        // Show game over screen (only in alternate mode)
+        if (startScreenElement) startScreenElement.style.display = 'none';
+        if (gameOverElement) gameOverElement.style.display = 'block';
+        if (countdownElement) countdownElement.style.display = 'none';
+        if (invulnerableElement) invulnerableElement.style.display = 'none';
     } else {
-        countdownElement.style.display = 'none';
-        invulnerableElement.style.display = 'none';
+        // Game is running
+        if (startScreenElement) startScreenElement.style.display = 'none';
+        if (gameOverElement) gameOverElement.style.display = 'none';
+        // Update countdown display
+        if (gameState.player.dead && gameState.player.deadTime > 0) {
+            countdownElement.style.display = 'block';
+            countdownElement.textContent = Math.ceil(gameState.player.deadTime);
+            invulnerableElement.style.display = 'none';
+        } else if (gameState.player.invulnerable && gameState.player.invulnerableTime > 0) {
+            countdownElement.style.display = 'none';
+            invulnerableElement.style.display = 'block';
+            invulnerableElement.textContent = 'INVULNERABLE\n' + Math.ceil(gameState.player.invulnerableTime);
+        } else {
+            countdownElement.style.display = 'none';
+            invulnerableElement.style.display = 'none';
+        }
     }
 
-    // Update score display
+    // Update score display (only in alternate mode)
     if (scoreElement) {
-        scoreElement.textContent = `Score: ${gameState.score} | Wave: ${gameState.wave}`;
+        if (alternateMode) {
+            scoreElement.style.display = 'block';
+            scoreElement.textContent = `Score: ${gameState.score} | High: ${highScore} | Wave: ${gameState.wave} | Lives: ${gameState.lives}`;
+        } else {
+            scoreElement.style.display = 'none';
+        }
+    }
+
+    // Update health bar (only in alternate mode)
+    if (healthFillElement && healthTextElement) {
+        if (alternateMode && gameState.gameStarted) {
+            const healthBar = document.getElementById('healthBar');
+            if (healthBar) healthBar.style.display = 'block';
+            const healthPercent = (gameState.player.health / gameState.player.maxHealth) * 100;
+            healthFillElement.style.width = healthPercent + '%';
+            healthTextElement.textContent = `${Math.ceil(gameState.player.health)} / ${gameState.player.maxHealth}`;
+        } else {
+            const healthBar = document.getElementById('healthBar');
+            if (healthBar) healthBar.style.display = 'none';
+        }
     }
 
     requestAnimationFrame(render);
@@ -1643,19 +1801,186 @@ function generateObstacles() {
     }
 }
 
+function spawnHealthPickup() {
+    const mapSize = 90;
+    const minDistance = 5; // Minimum distance from obstacles and player
+    let x, z;
+    let validPosition = false;
+    let attempts = 0;
+    const maxAttempts = 100;
+
+    while (!validPosition && attempts < maxAttempts) {
+        // Random position within map bounds
+        x = (Math.random() - 0.5) * mapSize;
+        z = (Math.random() - 0.5) * mapSize;
+
+        // Check distance from player
+        const distFromPlayer = Math.sqrt(
+            (x - gameState.player.x) * (x - gameState.player.x) +
+            (z - gameState.player.z) * (z - gameState.player.z)
+        );
+        if (distFromPlayer < minDistance) {
+            attempts++;
+            continue;
+        }
+
+        // Check distance from obstacles
+        validPosition = true;
+        for (const obstacle of gameState.obstacles) {
+            const dx = x - obstacle.x;
+            const dz = z - obstacle.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+            if (dist < minDistance) {
+                validPosition = false;
+                break;
+            }
+        }
+
+        // Check distance from other health pickups
+        if (validPosition) {
+            for (const pickup of gameState.healthPickups) {
+                const dx = x - pickup.x;
+                const dz = z - pickup.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                if (dist < minDistance) {
+                    validPosition = false;
+                    break;
+                }
+            }
+        }
+
+        attempts++;
+    }
+
+    if (validPosition) {
+        gameState.healthPickups.push({
+            x,
+            z,
+            rotation: Math.random() * Math.PI * 2 // Random initial rotation for visual variety
+        });
+    }
+}
+
+// Start the game
+function startGame() {
+    gameState.gameStarted = true;
+    if (startScreenElement) {
+        startScreenElement.style.display = 'none';
+    }
+}
+
+// Check if we should show start screen (only in alternate mode)
+function shouldShowStartScreen() {
+    return alternateMode && !gameState.gameStarted;
+}
+
+// Load high score from localStorage
+function loadHighScore() {
+    const stored = localStorage.getItem('battlezoneHighScore');
+    if (stored) {
+        highScore = parseInt(stored, 10) || 0;
+    }
+}
+
+// Save high score to localStorage (only if new score is higher)
+function updateHighScore(newScore) {
+    if (newScore > highScore) {
+        highScore = newScore;
+        localStorage.setItem('battlezoneHighScore', highScore.toString());
+    }
+}
+
+// Reset the game to initial state
+function resetGame() {
+    // Reset player
+    gameState.player.x = 0;
+    gameState.player.z = 0;
+    gameState.player.angle = 0;
+    gameState.player.turretAngle = 0;
+    gameState.player.velocity = 0;
+    gameState.player.dead = false;
+    gameState.player.deadTime = 0;
+    gameState.player.invulnerable = false;
+    gameState.player.invulnerableTime = 0;
+    gameState.player.health = 150;
+    gameState.player.maxHealth = 150;
+
+    // Reset game state
+    gameState.playerShot = null;
+    gameState.enemyShots = [];
+    gameState.enemies = [
+        { x: 20, z: 20, angle: 0, turretAngle: 0, shootTimer: 3 }
+    ];
+    gameState.score = 0;
+    gameState.wave = 1;
+    gameState.enemiesKilledThisWave = 0;
+    gameState.enemiesPerWave = 1;
+    gameState.lives = 3;
+    gameState.gameOver = false;
+    gameState.gameStarted = false;
+
+    // Regenerate obstacles and health pickups
+    generateObstacles();
+    gameState.healthPickups = [];
+    for (let i = 0; i < 5; i++) {
+        spawnHealthPickup();
+    }
+
+    // Reset camera angles
+    cameraYaw = 0;
+    cameraPitch = 0;
+
+    // Show start screen
+    if (startScreenElement) {
+        startScreenElement.style.display = 'block';
+    }
+    if (gameOverElement) {
+        gameOverElement.style.display = 'none';
+    }
+}
+
 // Main initialization
 function init() {
     if (!initWebGL()) return;
     if (!initShaders()) return;
     generateObstacles(); // Generate obstacles before geometry
+
+    // Spawn initial health pickups
+    for (let i = 0; i < 5; i++) {
+        spawnHealthPickup();
+    }
+
     initGeometry();
+
+    // Load high score from localStorage
+    loadHighScore();
 
     // Get UI elements
     countdownElement = document.getElementById('countdown');
     invulnerableElement = document.getElementById('invulnerable');
     scoreElement = document.getElementById('score');
+    healthFillElement = document.getElementById('healthFill');
+    healthTextElement = document.getElementById('healthText');
+    gameOverElement = document.getElementById('gameOver');
+    startScreenElement = document.getElementById('startScreen');
+    startButtonElement = document.getElementById('startButton');
+    restartButtonElement = document.getElementById('restartButton');
 
-    // Hide cursor in alternate mode (since it starts in alternate mode)
+    // Add event listeners for buttons
+    if (startButtonElement) {
+        startButtonElement.addEventListener('click', startGame);
+    }
+    if (restartButtonElement) {
+        restartButtonElement.addEventListener('click', resetGame);
+    }
+
+    // In normal mode, start game automatically (no start screen)
+    // In alternate mode, show start screen
+    if (!alternateMode) {
+        gameState.gameStarted = true;
+    }
+
+    // Update cursor based on mode
     const canvas = document.getElementById('glcanvas');
     if (alternateMode && canvas) {
         canvas.style.cursor = 'none';
@@ -1688,6 +2013,8 @@ window.addEventListener('keydown', (e) => {
             // Reset camera angles
             cameraYaw = gameState.player.angle; // Initialize to player angle
             cameraPitch = 0;
+            // Show start screen in alternate mode (reset game state)
+            resetGame();
         } else {
             crosshair.style.setProperty('--crosshair-color', '#0f0');
             // Reset crosshair to center in normal mode
@@ -1697,6 +2024,11 @@ window.addEventListener('keydown', (e) => {
             if (canvas) {
                 canvas.style.cursor = 'default';
             }
+            // Start game immediately in normal mode
+            gameState.gameStarted = true;
+            // Hide start screen and game over
+            if (startScreenElement) startScreenElement.style.display = 'none';
+            if (gameOverElement) gameOverElement.style.display = 'none';
         }
     }
 });
