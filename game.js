@@ -776,31 +776,51 @@ function updateEnemies(deltaTime) {
     const enemyTurnSpeed = 1 * deltaTime; // Slower turn speed to see rotation
 
     gameState.enemies.forEach(enemy => {
-        // Check for obstacles ahead
+        // Check for obstacles ahead and nearby
         const lookAheadDist = 5;
+        const tooCloseDist = 3;
         const lookAheadX = enemy.x + Math.sin(enemy.angle) * lookAheadDist;
         const lookAheadZ = enemy.z + Math.cos(enemy.angle) * lookAheadDist;
 
         let obstacleAhead = false;
+        let obstacleTooClose = false;
         let avoidLeft = false;
 
-        // Check if obstacle is in front
+        // Check if obstacle is in front or too close
         for (const obstacle of gameState.obstacles) {
             const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+            const dx = obstacle.x - enemy.x;
+            const dz = obstacle.z - enemy.z;
+            const distToObstacle = Math.sqrt(dx * dx + dz * dz);
+
+            // Check if obstacle is directly ahead
             if (checkCollision(lookAheadX, lookAheadZ, obstacle.x, obstacle.z, 1.5, obstacleRadius)) {
                 obstacleAhead = true;
                 // Determine which way to turn to avoid
-                const obstacleAngle = Math.atan2(obstacle.x - enemy.x, obstacle.z - enemy.z);
+                const obstacleAngle = Math.atan2(dx, dz);
                 let angleDiffToObstacle = obstacleAngle - enemy.angle;
                 while (angleDiffToObstacle > Math.PI) angleDiffToObstacle -= 2 * Math.PI;
                 while (angleDiffToObstacle < -Math.PI) angleDiffToObstacle += 2 * Math.PI;
                 avoidLeft = angleDiffToObstacle > 0;
-                break;
             }
+
+            // Check if obstacle is too close (need to back up)
+            if (distToObstacle < tooCloseDist + obstacleRadius) {
+                obstacleTooClose = true;
+            }
+
+            if (obstacleAhead || obstacleTooClose) break;
         }
 
         // Decide on movement
-        if (obstacleAhead) {
+        if (obstacleTooClose) {
+            // Back up and turn if too close to obstacle
+            if (avoidLeft) {
+                enemy.angle -= enemyTurnSpeed * 2;
+            } else {
+                enemy.angle += enemyTurnSpeed * 2;
+            }
+        } else if (obstacleAhead) {
             // Avoid obstacle by turning away
             if (avoidLeft) {
                 enemy.angle -= enemyTurnSpeed * 1.5;
@@ -839,9 +859,14 @@ function updateEnemies(deltaTime) {
             }
         }
 
-        // Always move forward in the direction facing
-        const moveX = Math.sin(enemy.angle) * enemySpeed;
-        const moveZ = Math.cos(enemy.angle) * enemySpeed;
+        // Move forward or backward depending on situation
+        let moveMultiplier = 1; // 1 = forward, -1 = backward
+        if (obstacleTooClose) {
+            moveMultiplier = -1; // Back up if too close to obstacle
+        }
+
+        const moveX = Math.sin(enemy.angle) * enemySpeed * moveMultiplier;
+        const moveZ = Math.cos(enemy.angle) * enemySpeed * moveMultiplier;
 
         // Calculate new position
         const newX = enemy.x + moveX;
@@ -872,16 +897,6 @@ function updateEnemies(deltaTime) {
         // Check player
         if (!collided && checkCollision(newX, newZ, gameState.player.x, gameState.player.z, 1.5, 1.5)) {
             collided = true;
-        }
-
-        // Check arena walls
-        const arenaSize = 45;
-        const enemyRadius = 1.5;
-        if (!collided) {
-            if (newX < -arenaSize + enemyRadius || newX > arenaSize - enemyRadius ||
-                newZ < -arenaSize + enemyRadius || newZ > arenaSize - enemyRadius) {
-                collided = true;
-            }
         }
 
         // Update position if no collision
@@ -993,15 +1008,6 @@ function updatePlayer(deltaTime) {
             }
         }
 
-        // Check collisions with arena walls
-        const arenaSize = 45;
-        if (!collided) {
-            if (newX < -arenaSize + playerRadius || newX > arenaSize - playerRadius ||
-                newZ < -arenaSize + playerRadius || newZ > arenaSize - playerRadius) {
-                collided = true;
-            }
-        }
-
         // Update position only if no collision
         if (!collided) {
             gameState.player.x = newX;
@@ -1063,15 +1069,6 @@ function updatePlayer(deltaTime) {
                     collided = true;
                     break;
                 }
-            }
-        }
-
-        // Check collisions with arena walls
-        const arenaSize = 45;
-        if (!collided) {
-            if (newX < -arenaSize + playerRadius || newX > arenaSize - playerRadius ||
-                newZ < -arenaSize + playerRadius || newZ > arenaSize - playerRadius) {
-                collided = true;
             }
         }
 
@@ -1364,29 +1361,6 @@ function render(currentTime) {
         drawObject(obstacleBuffer, modelMatrix, viewMatrix, projectionMatrix);
     });
 
-    // Draw arena walls
-    // North wall (z = 45)
-    let wallMatrix = mat4.translate(0, 2.5, 45);
-    drawObject(wallBuffer, wallMatrix, viewMatrix, projectionMatrix);
-
-    // South wall (z = -45)
-    wallMatrix = mat4.translate(0, 2.5, -45);
-    drawObject(wallBuffer, wallMatrix, viewMatrix, projectionMatrix);
-
-    // East wall (x = 45)
-    wallMatrix = mat4.multiply(
-        mat4.translate(45, 2.5, 0),
-        mat4.rotateY(Math.PI / 2)
-    );
-    drawObject(wallBuffer, wallMatrix, viewMatrix, projectionMatrix);
-
-    // West wall (x = -45)
-    wallMatrix = mat4.multiply(
-        mat4.translate(-45, 2.5, 0),
-        mat4.rotateY(Math.PI / 2)
-    );
-    drawObject(wallBuffer, wallMatrix, viewMatrix, projectionMatrix);
-
     if (alternateMode) {
         // Draw player tank (base + turret)
         if (!gameState.player.dead) {
@@ -1617,7 +1591,7 @@ function render(currentTime) {
 
 // Generate random obstacles
 function generateObstacles() {
-    const numObstacles = 30; // Number of obstacles to generate
+    const numObstacles = 15; // Number of obstacles to generate (reduced from 30)
     const mapSize = 90; // Keep obstacles within -45 to 45 range
     const minDistance = 8; // Minimum distance from player spawn (0,0) and from each other
 
