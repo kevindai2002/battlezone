@@ -842,13 +842,11 @@ function updateEnemies(deltaTime) {
 
         // Handle shooting - only shoot at player if they're alive
         if (!gameState.player.dead) {
-            // Update turret angle to track player (for alternate mode)
-            if (alternateMode) {
-                const dx = gameState.player.x - enemy.x;
-                const dz = gameState.player.z - enemy.z;
-                enemy.turretAngle = Math.atan2(dx, dz);
-            }
-            
+            // Update turret angle to always track player
+            const dx = gameState.player.x - enemy.x;
+            const dz = gameState.player.z - enemy.z;
+            enemy.turretAngle = Math.atan2(dx, dz);
+
             enemy.shootTimer -= deltaTime;
             if (enemy.shootTimer <= 0) {
                 // Calculate angle to player for shooting
@@ -1339,7 +1337,7 @@ function render(currentTime) {
             const baseMatrix = mat4.multiply(
                 mat4.translate(enemy.x, 0, enemy.z),
                 mat4.multiply(
-                    mat4.rotateY(enemy.angle),
+                    mat4.rotateY(-enemy.angle),
                     mat4.scale(1.5, 1, 1.5)
                 )
             );
@@ -1349,7 +1347,7 @@ function render(currentTime) {
             const turretMatrix = mat4.multiply(
                 mat4.translate(enemy.x, 0, enemy.z),
                 mat4.multiply(
-                    mat4.rotateY(enemy.turretAngle),
+                    mat4.rotateY(-enemy.turretAngle),
                     mat4.scale(1.5, 1, 1.5)
                 )
             );
@@ -1359,7 +1357,7 @@ function render(currentTime) {
             const cannonMatrix = mat4.multiply(
                 mat4.translate(enemy.x, 0, enemy.z),
                 mat4.multiply(
-                    mat4.rotateY(enemy.turretAngle),
+                    mat4.rotateY(-enemy.turretAngle),
                     mat4.scale(1.5, 1, 1.5)
                 )
             );
