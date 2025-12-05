@@ -20,20 +20,18 @@ const gameState = {
     enemies: [
         { x: 20, z: 20, angle: 0, turretAngle: 0, shootTimer: 3 }
     ],
-    obstacles: [
-        { x: -15, z: 10, type: 'cube' },
-        { x: 10, z: -15, type: 'pyramid' },
-        { x: -10, z: -10, type: 'cube' },
-        { x: 15, z: 15, type: 'pyramid' }
-    ]
+    obstacles: [] // Will be generated randomly
 };
 
 // Geometry buffers
 let obstacleBuffer, enemyBuffer, groundBuffer, playerBuffer, playerRadarBuffer, enemyRadarBuffer;
 // Alternate mode tank buffers
 let tankBaseBuffer, tankTurretBuffer, tankArrowBuffer, movementArrowBuffer;
+let enemyTankBaseBuffer, enemyTankTurretBuffer; // Enemy tanks in tron red
 // Alternate mode radar buffers
 let radarGridBuffer, radarPlayerArrowBuffer;
+// Shot buffer for alternate mode
+let shotBuffer; // Yellow sphere for shots in alternate mode
 
 // Input state
 const keys = {};
@@ -205,6 +203,76 @@ function createPyramid(color) {
         // Left
         -0.5, 0, -0.5, -0.5, 0,  0.5,  0, 1, 0
     ];
+
+    const colors = [];
+    for (let i = 0; i < vertices.length / 3; i++) {
+        colors.push(color[0], color[1], color[2]);
+    }
+
+    return { vertices, colors, count: vertices.length / 3 };
+}
+
+function createSphere(color, segments = 16) {
+    const vertices = [];
+    const latSegments = segments;
+    const lonSegments = segments;
+
+    // Generate vertices
+    for (let lat = 0; lat <= latSegments; lat++) {
+        const theta = (lat * Math.PI) / latSegments;
+        const sinTheta = Math.sin(theta);
+        const cosTheta = Math.cos(theta);
+
+        for (let lon = 0; lon <= lonSegments; lon++) {
+            const phi = (lon * 2 * Math.PI) / lonSegments;
+            const sinPhi = Math.sin(phi);
+            const cosPhi = Math.cos(phi);
+
+            const x = cosPhi * sinTheta * 0.5;
+            const y = cosTheta * 0.5;
+            const z = sinPhi * sinTheta * 0.5;
+
+            // Create triangles for each quad
+            if (lat < latSegments && lon < lonSegments) {
+                // First triangle
+                vertices.push(x, y, z);
+
+                const theta1 = ((lat + 1) * Math.PI) / latSegments;
+                const phi0 = phi;
+                vertices.push(
+                    Math.cos(phi0) * Math.sin(theta1) * 0.5,
+                    Math.cos(theta1) * 0.5,
+                    Math.sin(phi0) * Math.sin(theta1) * 0.5
+                );
+
+                const phi1 = ((lon + 1) * 2 * Math.PI) / lonSegments;
+                vertices.push(
+                    Math.cos(phi1) * Math.sin(theta) * 0.5,
+                    y,
+                    Math.sin(phi1) * Math.sin(theta) * 0.5
+                );
+
+                // Second triangle
+                vertices.push(
+                    Math.cos(phi1) * Math.sin(theta) * 0.5,
+                    y,
+                    Math.sin(phi1) * Math.sin(theta) * 0.5
+                );
+
+                vertices.push(
+                    Math.cos(phi0) * Math.sin(theta1) * 0.5,
+                    Math.cos(theta1) * 0.5,
+                    Math.sin(phi0) * Math.sin(theta1) * 0.5
+                );
+
+                vertices.push(
+                    Math.cos(phi1) * Math.sin(theta1) * 0.5,
+                    Math.cos(theta1) * 0.5,
+                    Math.sin(phi1) * Math.sin(theta1) * 0.5
+                );
+            }
+        }
+    }
 
     const colors = [];
     for (let i = 0; i < vertices.length / 3; i++) {
@@ -404,22 +472,23 @@ function createMovementArrow(color) {
 function createRadarGrid(color, size, spacing) {
     const vertices = [];
     const halfSize = size / 2;
-    
-    // Vertical lines
+    const gridHeight = 0.0; // On the ground so objects cover it
+
+    // Vertical lines (parallel to Z axis)
     for (let x = -halfSize; x <= halfSize; x += spacing) {
-        vertices.push(x, 0, -halfSize, x, 0, halfSize);
+        vertices.push(x, gridHeight, -halfSize, x, gridHeight, halfSize);
     }
-    
-    // Horizontal lines
+
+    // Horizontal lines (parallel to X axis)
     for (let z = -halfSize; z <= halfSize; z += spacing) {
-        vertices.push(-halfSize, 0, z, halfSize, 0, z);
+        vertices.push(-halfSize, gridHeight, z, halfSize, gridHeight, z);
     }
-    
+
     const colors = [];
     for (let i = 0; i < vertices.length / 3; i++) {
         colors.push(color[0], color[1], color[2]);
     }
-    
+
     return { vertices, colors, count: vertices.length / 3 };
 }
 
@@ -563,23 +632,25 @@ function initShaders() {
 function initGeometry() {
     if (alternateMode) {
         // Alternate mode: neon colors
-        obstacleBuffer = createBuffers(createCube([1, 0, 1]));      // Magenta obstacles
-        enemyBuffer = createBuffers(createPyramid([0, 1, 1])); // Cyan enemies (for radar only)
-        playerBuffer = createBuffers(createCube([1, 1, 0])); // Yellow player (not used in main view)
-        playerRadarBuffer = createBuffers(createPyramid([1, 1, 0])); // Yellow player radar icon
-        enemyRadarBuffer = createBuffers(createPyramid([0, 1, 1])); // Cyan enemy radar icon
-        groundBuffer = createBuffers(createGround(200, [0.1, 0.0, 0.2])); // Dark purple - extended size
-        // Tank geometry for alternate mode
-        tankBaseBuffer = createBuffers(createTankBase([0, 1, 1])); // Cyan base
-        tankTurretBuffer = createBuffers(createTankTurret([0.8, 1, 1])); // Light cyan turret
-        tankArrowBuffer = createBuffers(createTankArrow([1, 1, 0])); // Yellow arrow pointing forward (base direction)
+        obstacleBuffer = createBuffers(createCube([0.5, 0.5, 0.5]));      // Gray obstacles
+        enemyBuffer = createBuffers(createPyramid([1, 0, 0])); // Red enemies (for radar only)
+        playerBuffer = createBuffers(createCube([0, 0.5, 1])); // Tron blue player (not used in main view)
+        playerRadarBuffer = createBuffers(createPyramid([0, 0.5, 1])); // Tron blue player radar icon
+        enemyRadarBuffer = createBuffers(createPyramid([1, 0, 0])); // Red enemy radar icon
+        groundBuffer = createBuffers(createGround(200, [0.05, 0.0, 0.1])); // Darker purple - extended size
+        // Tank geometry for alternate mode - Player (tron blue)
+        tankBaseBuffer = createBuffers(createTankBase([0, 0.5, 1])); // Tron blue base
+        tankTurretBuffer = createBuffers(createTankTurret([0.3, 0.7, 1])); // Light tron blue turret
+        tankArrowBuffer = createBuffers(createTankArrow([0, 0.8, 1])); // Bright blue arrow pointing forward (base direction)
         movementArrowBuffer = createBuffers(createMovementArrow([1, 0, 0])); // Red arrow pointing in movement direction
+        // Enemy tank geometry (tron red)
+        enemyTankBaseBuffer = createBuffers(createTankBase([1, 0, 0])); // Tron red base
+        enemyTankTurretBuffer = createBuffers(createTankTurret([1, 0.3, 0.3])); // Light tron red turret
         // Radar geometry for alternate mode
-        radarGridBuffer = createBuffers(createRadarGrid([0.3, 0.0, 0.5], 60, 5)); // Purple grid lines
-        radarPlayerArrowBuffer = createBuffers(createRadarPlayerTriangle([1, 1, 0])); // Yellow triangle for player on radar
-        // Radar geometry for alternate mode
-        radarGridBuffer = createBuffers(createRadarGrid([0.3, 0.0, 0.5], 60, 5)); // Purple grid lines
-        radarPlayerArrowBuffer = createBuffers(createRadarPlayerTriangle([1, 1, 0])); // Yellow triangle for player on radar
+        radarGridBuffer = createBuffers(createRadarGrid([0.8, 0.6, 1.0], 200, 5)); // More opaque purple grid lines - full floor size
+        radarPlayerArrowBuffer = createBuffers(createRadarPlayerTriangle([0, 0.5, 1])); // Tron blue triangle for player on radar
+        // Shot geometry for alternate mode
+        shotBuffer = createBuffers(createSphere([1, 1, 0])); // Yellow shots
     } else {
         // Normal mode: original colors
         obstacleBuffer = createBuffers(createCube([0.5, 0.5, 0.5]));      // Gray obstacles
@@ -615,7 +686,8 @@ function updateEnemies(deltaTime) {
 
         // Check if obstacle is in front
         for (const obstacle of gameState.obstacles) {
-            if (checkCollision(lookAheadX, lookAheadZ, obstacle.x, obstacle.z, 1.5, 3)) {
+            const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+            if (checkCollision(lookAheadX, lookAheadZ, obstacle.x, obstacle.z, 1.5, obstacleRadius)) {
                 obstacleAhead = true;
                 // Determine which way to turn to avoid
                 const obstacleAngle = Math.atan2(obstacle.x - enemy.x, obstacle.z - enemy.z);
@@ -680,7 +752,8 @@ function updateEnemies(deltaTime) {
 
         // Check obstacles
         for (const obstacle of gameState.obstacles) {
-            if (checkCollision(newX, newZ, obstacle.x, obstacle.z, 1.5, 2)) {
+            const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+            if (checkCollision(newX, newZ, obstacle.x, obstacle.z, 1.5, obstacleRadius)) {
                 collided = true;
                 break;
             }
@@ -795,7 +868,8 @@ function updatePlayer(deltaTime) {
         // Check collisions with obstacles
         let collided = false;
         for (const obstacle of gameState.obstacles) {
-            if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, 2)) {
+            const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+            if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, obstacleRadius)) {
                 collided = true;
                 break;
             }
@@ -854,7 +928,8 @@ function updatePlayer(deltaTime) {
         // Check collisions with obstacles
         let collided = false;
         for (const obstacle of gameState.obstacles) {
-            if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, 2)) {
+            const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+            if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, obstacleRadius)) {
                 collided = true;
                 break;
             }
@@ -919,7 +994,8 @@ function updateShots(deltaTime) {
         } else {
             // Check collision with obstacles
             for (const obstacle of gameState.obstacles) {
-                if (checkCollision(gameState.playerShot.x, gameState.playerShot.z, obstacle.x, obstacle.z, shotRadius, 2)) {
+                const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+                if (checkCollision(gameState.playerShot.x, gameState.playerShot.z, obstacle.x, obstacle.z, shotRadius, obstacleRadius)) {
                     gameState.playerShot = null;
                     break;
                 }
@@ -956,7 +1032,8 @@ function updateShots(deltaTime) {
         // Check collision with obstacles
         let hitObstacle = false;
         for (const obstacle of gameState.obstacles) {
-            if (checkCollision(shot.x, shot.z, obstacle.x, obstacle.z, shotRadius, 2)) {
+            const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+            if (checkCollision(shot.x, shot.z, obstacle.x, obstacle.z, shotRadius, obstacleRadius)) {
                 gameState.enemyShots.splice(i, 1);
                 hitObstacle = true;
                 break;
@@ -1110,11 +1187,21 @@ function render(currentTime) {
     // Draw ground
     drawObject(groundBuffer, mat4.identity(), viewMatrix, projectionMatrix);
 
+    if (alternateMode) {
+        // Draw grid overlay on floor (raised slightly to avoid z-fighting with ground)
+        gl.lineWidth(2.0);
+        const gridMatrix = mat4.translate(0, 0.01, 0); // Raise grid very slightly above ground
+        drawObject(radarGridBuffer, gridMatrix, viewMatrix, projectionMatrix, gl.LINES);
+        gl.lineWidth(1.0);
+    }
+
     // Draw obstacles
     gameState.obstacles.forEach(obstacle => {
+        const size = obstacle.size || 1.0;
+        const height = obstacle.height || 1.0;
         const modelMatrix = mat4.multiply(
-            mat4.translate(obstacle.x, 0.5, obstacle.z),
-            mat4.scale(2, 2, 2)
+            mat4.translate(obstacle.x, height / 2, obstacle.z),
+            mat4.scale(size, height, size)
         );
         drawObject(obstacleBuffer, modelMatrix, viewMatrix, projectionMatrix);
     });
@@ -1176,7 +1263,7 @@ function render(currentTime) {
             }
         }
 
-        // Draw enemy tanks (base + turret)
+        // Draw enemy tanks (base + turret) in tron red
         gameState.enemies.forEach(enemy => {
             // Base (rotates with movement direction)
             const baseMatrix = mat4.multiply(
@@ -1186,8 +1273,8 @@ function render(currentTime) {
                     mat4.scale(1.5, 1, 1.5)
                 )
             );
-            drawObject(tankBaseBuffer, baseMatrix, viewMatrix, projectionMatrix);
-            
+            drawObject(enemyTankBaseBuffer, baseMatrix, viewMatrix, projectionMatrix);
+
             // Turret (rotates to face player)
             const turretMatrix = mat4.multiply(
                 mat4.translate(enemy.x, 0, enemy.z),
@@ -1196,7 +1283,7 @@ function render(currentTime) {
                     mat4.scale(1.5, 1, 1.5)
                 )
             );
-            drawObject(tankTurretBuffer, turretMatrix, viewMatrix, projectionMatrix);
+            drawObject(enemyTankTurretBuffer, turretMatrix, viewMatrix, projectionMatrix);
         });
     } else {
         // Normal mode: draw enemy tanks as pyramids
@@ -1218,7 +1305,8 @@ function render(currentTime) {
             mat4.translate(gameState.playerShot.x, 0.5, gameState.playerShot.z),
             mat4.scale(0.5, 0.5, 0.5)
         );
-        drawObject(obstacleBuffer, modelMatrix, viewMatrix, projectionMatrix);
+        const buffer = alternateMode ? shotBuffer : obstacleBuffer;
+        drawObject(buffer, modelMatrix, viewMatrix, projectionMatrix);
     }
 
     // Draw enemy shots
@@ -1227,7 +1315,8 @@ function render(currentTime) {
             mat4.translate(shot.x, 0.5, shot.z),
             mat4.scale(0.5, 0.5, 0.5)
         );
-        drawObject(obstacleBuffer, modelMatrix, viewMatrix, projectionMatrix);
+        const buffer = alternateMode ? shotBuffer : obstacleBuffer;
+        drawObject(buffer, modelMatrix, viewMatrix, projectionMatrix);
     });
 
     // === RADAR VIEW (Orthographic top-down) ===
@@ -1247,15 +1336,20 @@ function render(currentTime) {
     drawObject(groundBuffer, mat4.identity(), radarView, radarProjection);
 
     if (alternateMode) {
-        // Draw grid for alternate mode radar (as lines)
-        drawObject(radarGridBuffer, mat4.identity(), radarView, radarProjection, gl.LINES);
+        // Draw grid for alternate mode radar (as lines, raised to avoid z-fighting)
+        gl.lineWidth(2.0); // Make lines thicker for better visibility
+        const radarGridMatrix = mat4.translate(0, 0.01, 0); // Raise grid slightly above ground
+        drawObject(radarGridBuffer, radarGridMatrix, radarView, radarProjection, gl.LINES);
+        gl.lineWidth(1.0); // Reset to default
     }
 
-    // Draw obstacles on radar (larger icons)
+    // Draw obstacles on radar (scaled based on actual size)
     gameState.obstacles.forEach(obstacle => {
+        const size = obstacle.size || 1.0;
+        const radarScale = size * 2; // Scale for radar visibility
         const modelMatrix = mat4.multiply(
             mat4.translate(obstacle.x, 0.5, obstacle.z),
-            mat4.scale(4, 4, 4) // Increased from 2 to 4
+            mat4.scale(radarScale, radarScale, radarScale)
         );
         drawObject(obstacleBuffer, modelMatrix, radarView, radarProjection);
     });
@@ -1315,10 +1409,65 @@ function render(currentTime) {
     requestAnimationFrame(render);
 }
 
+// Generate random obstacles
+function generateObstacles() {
+    const numObstacles = 30; // Number of obstacles to generate
+    const mapSize = 90; // Keep obstacles within -45 to 45 range
+    const minDistance = 8; // Minimum distance from player spawn (0,0) and from each other
+
+    gameState.obstacles = [];
+
+    for (let i = 0; i < numObstacles; i++) {
+        let x, z;
+        let validPosition = false;
+        let attempts = 0;
+        const maxAttempts = 100;
+
+        while (!validPosition && attempts < maxAttempts) {
+            // Random position within map bounds
+            x = (Math.random() - 0.5) * mapSize;
+            z = (Math.random() - 0.5) * mapSize;
+
+            // Check distance from player spawn
+            const distFromPlayer = Math.sqrt(x * x + z * z);
+            if (distFromPlayer < minDistance) {
+                attempts++;
+                continue;
+            }
+
+            // Check distance from other obstacles
+            validPosition = true;
+            for (const obstacle of gameState.obstacles) {
+                const dx = x - obstacle.x;
+                const dz = z - obstacle.z;
+                const dist = Math.sqrt(dx * dx + dz * dz);
+                if (dist < minDistance) {
+                    validPosition = false;
+                    break;
+                }
+            }
+
+            attempts++;
+        }
+
+        if (validPosition) {
+            // Random size between 0.5 and 2.5
+            const size = 0.5 + Math.random() * 2.0;
+            // Random height between 0.5 and 3.0
+            const height = 0.5 + Math.random() * 2.5;
+            // Random type
+            const type = Math.random() < 0.5 ? 'cube' : 'pyramid';
+
+            gameState.obstacles.push({ x, z, type, size, height });
+        }
+    }
+}
+
 // Main initialization
 function init() {
     if (!initWebGL()) return;
     if (!initShaders()) return;
+    generateObstacles(); // Generate obstacles before geometry
     initGeometry();
 
     // Get UI elements
