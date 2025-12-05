@@ -24,7 +24,7 @@ const gameState = {
 };
 
 // Geometry buffers
-let obstacleBuffer, enemyBuffer, groundBuffer, playerBuffer, playerRadarBuffer, enemyRadarBuffer;
+let obstacleBuffer, enemyBuffer, groundBuffer, playerBuffer, playerRadarBuffer, enemyRadarBuffer, wallBuffer;
 // Alternate mode tank buffers
 let tankBaseBuffer, tankTurretBuffer, tankCannonBuffer, tankArrowBuffer, movementArrowBuffer;
 let enemyTankBaseBuffer, enemyTankTurretBuffer, enemyTankCannonBuffer; // Enemy tanks in tron red
@@ -286,6 +286,37 @@ function createGround(size, color) {
     const vertices = [
         -size, 0, -size,  size, 0, -size,  size, 0,  size,
         -size, 0, -size,  size, 0,  size, -size, 0,  size
+    ];
+
+    const colors = [];
+    for (let i = 0; i < vertices.length / 3; i++) {
+        colors.push(color[0], color[1], color[2]);
+    }
+
+    return { vertices, colors, count: vertices.length / 3 };
+}
+
+// Create a wall segment (tall box)
+function createWall(length, height, thickness, color) {
+    const vertices = [
+        // Front face
+        -length/2, 0, thickness/2,  length/2, 0, thickness/2,  length/2, height, thickness/2,
+        -length/2, 0, thickness/2,  length/2, height, thickness/2, -length/2, height, thickness/2,
+        // Back face
+        -length/2, 0, -thickness/2, -length/2, height, -thickness/2,  length/2, height, -thickness/2,
+        -length/2, 0, -thickness/2,  length/2, height, -thickness/2,  length/2, 0, -thickness/2,
+        // Top face
+        -length/2, height, -thickness/2, -length/2, height, thickness/2,  length/2, height, thickness/2,
+        -length/2, height, -thickness/2,  length/2, height, thickness/2,  length/2, height, -thickness/2,
+        // Bottom face
+        -length/2, 0, -thickness/2,  length/2, 0, -thickness/2,  length/2, 0, thickness/2,
+        -length/2, 0, -thickness/2,  length/2, 0, thickness/2, -length/2, 0, thickness/2,
+        // Right face
+         length/2, 0, -thickness/2,  length/2, height, -thickness/2,  length/2, height, thickness/2,
+         length/2, 0, -thickness/2,  length/2, height, thickness/2,  length/2, 0, thickness/2,
+        // Left face
+        -length/2, 0, -thickness/2, -length/2, 0, thickness/2, -length/2, height, thickness/2,
+        -length/2, 0, -thickness/2, -length/2, height, thickness/2, -length/2, height, -thickness/2
     ];
 
     const colors = [];
@@ -711,6 +742,8 @@ function initGeometry() {
         radarPlayerArrowBuffer = createBuffers(createRadarPlayerTriangle([0, 0.5, 1])); // Tron blue triangle for player on radar
         // Shot geometry for alternate mode
         shotBuffer = createBuffers(createSphere([1, 1, 0])); // Yellow shots
+        // Wall geometry for alternate mode
+        wallBuffer = createBuffers(createWall(90, 5, 1, [0.3, 0.0, 0.5])); // Purple walls
     } else {
         // Normal mode: original colors
         obstacleBuffer = createBuffers(createCube([0.5, 0.5, 0.5]));      // Gray obstacles
@@ -719,6 +752,8 @@ function initGeometry() {
         playerRadarBuffer = createBuffers(createPyramid([0.6, 0.85, 1.0])); // Carolina blue player radar icon
         enemyRadarBuffer = createBuffers(createPyramid([1, 0, 0])); // Red enemy radar icon
         groundBuffer = createBuffers(createGround(200, [0.2, 0.2, 0.2])); // Gray - extended size
+        // Wall geometry for normal mode
+        wallBuffer = createBuffers(createWall(90, 5, 1, [0.4, 0.4, 0.4])); // Gray walls
     }
 }
 
@@ -834,6 +869,16 @@ function updateEnemies(deltaTime) {
             collided = true;
         }
 
+        // Check arena walls
+        const arenaSize = 45;
+        const enemyRadius = 1.5;
+        if (!collided) {
+            if (newX < -arenaSize + enemyRadius || newX > arenaSize - enemyRadius ||
+                newZ < -arenaSize + enemyRadius || newZ > arenaSize - enemyRadius) {
+                collided = true;
+            }
+        }
+
         // Update position if no collision
         if (!collided) {
             enemy.x = newX;
@@ -943,6 +988,15 @@ function updatePlayer(deltaTime) {
             }
         }
 
+        // Check collisions with arena walls
+        const arenaSize = 45;
+        if (!collided) {
+            if (newX < -arenaSize + playerRadius || newX > arenaSize - playerRadius ||
+                newZ < -arenaSize + playerRadius || newZ > arenaSize - playerRadius) {
+                collided = true;
+            }
+        }
+
         // Update position only if no collision
         if (!collided) {
             gameState.player.x = newX;
@@ -953,9 +1007,13 @@ function updatePlayer(deltaTime) {
         if (keys[' '] && !gameState.playerShot) {
             // Negate turret angle to match the corrected turret rotation direction
             const shootAngle = -gameState.player.turretAngle;
+            const startX = gameState.player.x + Math.sin(shootAngle) * 2;
+            const startZ = gameState.player.z + Math.cos(shootAngle) * 2;
             gameState.playerShot = {
-                x: gameState.player.x + Math.sin(shootAngle) * 2,
-                z: gameState.player.z + Math.cos(shootAngle) * 2,
+                x: startX,
+                z: startZ,
+                startX: startX,
+                startZ: startZ,
                 vx: Math.sin(shootAngle) * 30,
                 vz: Math.cos(shootAngle) * 30
             };
@@ -1003,6 +1061,15 @@ function updatePlayer(deltaTime) {
             }
         }
 
+        // Check collisions with arena walls
+        const arenaSize = 45;
+        if (!collided) {
+            if (newX < -arenaSize + playerRadius || newX > arenaSize - playerRadius ||
+                newZ < -arenaSize + playerRadius || newZ > arenaSize - playerRadius) {
+                collided = true;
+            }
+        }
+
         // Update position only if no collision
         if (!collided) {
             gameState.player.x = newX;
@@ -1011,9 +1078,13 @@ function updatePlayer(deltaTime) {
 
         // Handle shooting
         if (keys[' '] && !gameState.playerShot) {
+            const startX = gameState.player.x + Math.sin(gameState.player.angle) * 2;
+            const startZ = gameState.player.z + Math.cos(gameState.player.angle) * 2;
             gameState.playerShot = {
-                x: gameState.player.x + Math.sin(gameState.player.angle) * 2,
-                z: gameState.player.z + Math.cos(gameState.player.angle) * 2,
+                x: startX,
+                z: startZ,
+                startX: startX,
+                startZ: startZ,
                 vx: Math.sin(gameState.player.angle) * 30,
                 vz: Math.cos(gameState.player.angle) * 30
             };
@@ -1046,8 +1117,14 @@ function updateShots(deltaTime) {
         gameState.playerShot.x += gameState.playerShot.vx * deltaTime;
         gameState.playerShot.z += gameState.playerShot.vz * deltaTime;
 
-        // Check if out of bounds
-        if (Math.abs(gameState.playerShot.x) > fieldSize || Math.abs(gameState.playerShot.z) > fieldSize) {
+        // Calculate distance traveled
+        const dx = gameState.playerShot.x - gameState.playerShot.startX;
+        const dz = gameState.playerShot.z - gameState.playerShot.startZ;
+        const distanceTraveled = Math.sqrt(dx * dx + dz * dz);
+        const maxDistance = 60; // Maximum distance bullets can travel
+
+        // Check if out of bounds or traveled too far
+        if (Math.abs(gameState.playerShot.x) > fieldSize || Math.abs(gameState.playerShot.z) > fieldSize || distanceTraveled > maxDistance) {
             gameState.playerShot = null;
         } else {
             // Check collision with obstacles
@@ -1263,6 +1340,29 @@ function render(currentTime) {
         );
         drawObject(obstacleBuffer, modelMatrix, viewMatrix, projectionMatrix);
     });
+
+    // Draw arena walls
+    // North wall (z = 45)
+    let wallMatrix = mat4.translate(0, 2.5, 45);
+    drawObject(wallBuffer, wallMatrix, viewMatrix, projectionMatrix);
+
+    // South wall (z = -45)
+    wallMatrix = mat4.translate(0, 2.5, -45);
+    drawObject(wallBuffer, wallMatrix, viewMatrix, projectionMatrix);
+
+    // East wall (x = 45)
+    wallMatrix = mat4.multiply(
+        mat4.translate(45, 2.5, 0),
+        mat4.rotateY(Math.PI / 2)
+    );
+    drawObject(wallBuffer, wallMatrix, viewMatrix, projectionMatrix);
+
+    // West wall (x = -45)
+    wallMatrix = mat4.multiply(
+        mat4.translate(-45, 2.5, 0),
+        mat4.rotateY(Math.PI / 2)
+    );
+    drawObject(wallBuffer, wallMatrix, viewMatrix, projectionMatrix);
 
     if (alternateMode) {
         // Draw player tank (base + turret)
