@@ -20,7 +20,11 @@ const gameState = {
     enemies: [
         { x: 20, z: 20, angle: 0, turretAngle: 0, shootTimer: 3 }
     ],
-    obstacles: [] // Will be generated randomly
+    obstacles: [], // Will be generated randomly
+    score: 0,
+    wave: 1,
+    enemiesKilledThisWave: 0,
+    enemiesPerWave: 1 // Starting with 1 enemy
 };
 
 // Geometry buffers
@@ -51,6 +55,7 @@ const cameraRotateSpeed = 2.0; // Camera rotation speed with arrow keys
 // UI elements
 let countdownElement;
 let invulnerableElement;
+let scoreElement;
 
 // Matrix Math Utilities
 const mat4 = {
@@ -1143,8 +1148,26 @@ function updateShots(deltaTime) {
                     if (checkCollision(gameState.playerShot.x, gameState.playerShot.z, enemy.x, enemy.z, shotRadius, 1.5)) {
                         gameState.playerShot = null;
                         gameState.enemies.splice(i, 1);
-                        // Spawn new enemy at random edge
-                        spawnEnemy();
+
+                        // Update score (1 point per enemy * wave multiplier)
+                        gameState.score += 1 * gameState.wave;
+                        gameState.enemiesKilledThisWave++;
+
+                        // Check if wave is complete
+                        if (gameState.enemiesKilledThisWave >= gameState.enemiesPerWave) {
+                            // Start next wave
+                            gameState.wave++;
+                            gameState.enemiesPerWave = gameState.wave; // Each wave has wave number of enemies
+                            gameState.enemiesKilledThisWave = 0;
+
+                            // Spawn all enemies for new wave
+                            for (let j = 0; j < gameState.enemiesPerWave; j++) {
+                                spawnEnemy();
+                            }
+                        } else {
+                            // Spawn replacement enemy for current wave
+                            spawnEnemy();
+                        }
                         break;
                     }
                 }
@@ -1584,6 +1607,11 @@ function render(currentTime) {
         invulnerableElement.style.display = 'none';
     }
 
+    // Update score display
+    if (scoreElement) {
+        scoreElement.textContent = `Score: ${gameState.score} | Wave: ${gameState.wave}`;
+    }
+
     requestAnimationFrame(render);
 }
 
@@ -1651,6 +1679,7 @@ function init() {
     // Get UI elements
     countdownElement = document.getElementById('countdown');
     invulnerableElement = document.getElementById('invulnerable');
+    scoreElement = document.getElementById('score');
 
     // Hide cursor in alternate mode (since it starts in alternate mode)
     const canvas = document.getElementById('glcanvas');
