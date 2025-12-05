@@ -829,7 +829,7 @@ function updatePlayer(deltaTime) {
 
     const moveSpeed = 10 * deltaTime;
     const turnSpeed = 2 * deltaTime;
-    const playerRadius = 1.5;
+    const playerRadius = 0.6; // Extremely tight collision for more accurate tank hitbox
 
     if (alternateMode) {
         // Alternate mode: Tank base rotation with A/D, movement with W/S
