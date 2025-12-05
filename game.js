@@ -820,6 +820,35 @@ function checkCollision(x1, z1, x2, z2, radius1, radius2) {
     return distance < (radius1 + radius2);
 }
 
+// Check collision between a circle and a wall (axis-aligned rectangle)
+function checkWallCollision(circleX, circleZ, wallX, wallZ, wallRotation, wallLength, wallThickness, circleRadius) {
+    // Rotate the circle position into the wall's local space
+    const dx = circleX - wallX;
+    const dz = circleZ - wallZ;
+
+    // Rotate by -wallRotation to get into wall's local coordinate system
+    const cos = Math.cos(-wallRotation);
+    const sin = Math.sin(-wallRotation);
+    const localX = dx * cos - dz * sin;
+    const localZ = dx * sin + dz * cos;
+
+    // In wall's local space, wall extends from -length/2 to +length/2 in X
+    // and from -thickness/2 to +thickness/2 in Z
+    const halfLength = wallLength / 2;
+    const halfThickness = wallThickness / 2;
+
+    // Find the closest point on the rectangle to the circle
+    const closestX = Math.max(-halfLength, Math.min(localX, halfLength));
+    const closestZ = Math.max(-halfThickness, Math.min(localZ, halfThickness));
+
+    // Calculate distance from circle center to closest point
+    const distX = localX - closestX;
+    const distZ = localZ - closestZ;
+    const distanceSquared = distX * distX + distZ * distZ;
+
+    return distanceSquared < (circleRadius * circleRadius);
+}
+
 // Update enemies
 function updateEnemies(deltaTime) {
     const enemySpeed = 5 * deltaTime;
@@ -925,12 +954,23 @@ function updateEnemies(deltaTime) {
         // Check collisions
         let collided = false;
 
-        // Check obstacles
-        for (const obstacle of gameState.obstacles) {
-            const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
-            if (checkCollision(newX, newZ, obstacle.x, obstacle.z, 1.5, obstacleRadius)) {
-                collided = true;
-                break;
+        // Check obstacles (including walls)
+        if (!collided) {
+            for (const obstacle of gameState.obstacles) {
+                if (obstacle.type === 'wall') {
+                    // Use wall collision for rectangular walls
+                    if (checkWallCollision(newX, newZ, obstacle.x, obstacle.z, obstacle.rotation, 90, obstacle.thickness, 1.5)) {
+                        collided = true;
+                        break;
+                    }
+                } else {
+                    // Use circular collision for regular obstacles
+                    const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+                    if (checkCollision(newX, newZ, obstacle.x, obstacle.z, 1.5, obstacleRadius)) {
+                        collided = true;
+                        break;
+                    }
+                }
             }
         }
 
@@ -1038,14 +1078,25 @@ function updatePlayer(deltaTime) {
             newX -= Math.sin(moveAngle) * moveSpeed;
             newZ -= Math.cos(moveAngle) * moveSpeed;
         }
-        
-        // Check collisions with obstacles
+
+        // Check collisions with obstacles (including walls)
         let collided = false;
-        for (const obstacle of gameState.obstacles) {
-            const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
-            if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, obstacleRadius)) {
-                collided = true;
-                break;
+        if (!collided) {
+            for (const obstacle of gameState.obstacles) {
+                if (obstacle.type === 'wall') {
+                    // Use wall collision for rectangular walls
+                    if (checkWallCollision(newX, newZ, obstacle.x, obstacle.z, obstacle.rotation, 90, obstacle.thickness, playerRadius)) {
+                        collided = true;
+                        break;
+                    }
+                } else {
+                    // Use circular collision for regular obstacles
+                    const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+                    if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, obstacleRadius)) {
+                        collided = true;
+                        break;
+                    }
+                }
             }
         }
 
@@ -1103,13 +1154,24 @@ function updatePlayer(deltaTime) {
             newZ -= Math.cos(gameState.player.angle) * moveSpeed;
         }
 
-        // Check collisions with obstacles
+        // Check collisions with obstacles (including walls)
         let collided = false;
-        for (const obstacle of gameState.obstacles) {
-            const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
-            if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, obstacleRadius)) {
-                collided = true;
-                break;
+        if (!collided) {
+            for (const obstacle of gameState.obstacles) {
+                if (obstacle.type === 'wall') {
+                    // Use wall collision for rectangular walls
+                    if (checkWallCollision(newX, newZ, obstacle.x, obstacle.z, obstacle.rotation, 90, obstacle.thickness, playerRadius)) {
+                        collided = true;
+                        break;
+                    }
+                } else {
+                    // Use circular collision for regular obstacles
+                    const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+                    if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, obstacleRadius)) {
+                        collided = true;
+                        break;
+                    }
+                }
             }
         }
 
@@ -1198,10 +1260,18 @@ function updateShots(deltaTime) {
         if (Math.abs(gameState.playerShot.x) > fieldSize || Math.abs(gameState.playerShot.z) > fieldSize || distanceTraveled > maxDistance) {
             gameState.playerShot = null;
         } else {
-            // Check collision with obstacles
+            // Check collision with obstacles (including walls)
             for (const obstacle of gameState.obstacles) {
-                const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
-                if (checkCollision(gameState.playerShot.x, gameState.playerShot.z, obstacle.x, obstacle.z, shotRadius, obstacleRadius)) {
+                let hit = false;
+                if (obstacle.type === 'wall') {
+                    // Use wall collision for rectangular walls
+                    hit = checkWallCollision(gameState.playerShot.x, gameState.playerShot.z, obstacle.x, obstacle.z, obstacle.rotation, 90, obstacle.thickness, shotRadius);
+                } else {
+                    // Use circular collision for regular obstacles
+                    const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+                    hit = checkCollision(gameState.playerShot.x, gameState.playerShot.z, obstacle.x, obstacle.z, shotRadius, obstacleRadius);
+                }
+                if (hit) {
                     gameState.playerShot = null;
                     break;
                 }
@@ -1259,11 +1329,19 @@ function updateShots(deltaTime) {
             continue;
         }
 
-        // Check collision with obstacles
+        // Check collision with obstacles (including walls)
         let hitObstacle = false;
         for (const obstacle of gameState.obstacles) {
-            const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
-            if (checkCollision(shot.x, shot.z, obstacle.x, obstacle.z, shotRadius, obstacleRadius)) {
+            let hit = false;
+            if (obstacle.type === 'wall') {
+                // Use wall collision for rectangular walls
+                hit = checkWallCollision(shot.x, shot.z, obstacle.x, obstacle.z, obstacle.rotation, 90, obstacle.thickness, shotRadius);
+            } else {
+                // Use circular collision for regular obstacles
+                const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+                hit = checkCollision(shot.x, shot.z, obstacle.x, obstacle.z, shotRadius, obstacleRadius);
+            }
+            if (hit) {
                 gameState.enemyShots.splice(i, 1);
                 hitObstacle = true;
                 break;
@@ -1325,11 +1403,19 @@ function spawnEnemy() {
             case 3: x = (Math.random() - 0.5) * 80; z = 45; break;
         }
 
-        // Check if position is clear of obstacles
+        // Check if position is clear of obstacles (including walls)
         validPosition = true;
         for (const obstacle of gameState.obstacles) {
-            const obstacleRadius = (obstacle.size || 1.0) * 1.2;
-            if (checkCollision(x, z, obstacle.x, obstacle.z, enemyRadius, obstacleRadius + minDistanceFromObstacles)) {
+            let tooClose = false;
+            if (obstacle.type === 'wall') {
+                // For walls, check against the rectangle with added margin
+                // We'll check if the spawn point is too close to the wall
+                tooClose = checkWallCollision(x, z, obstacle.x, obstacle.z, obstacle.rotation, 90 + minDistanceFromObstacles * 2, obstacle.thickness + minDistanceFromObstacles * 2, enemyRadius);
+            } else {
+                const obstacleRadius = (obstacle.size || 1.0) * 1.2;
+                tooClose = checkCollision(x, z, obstacle.x, obstacle.z, enemyRadius, obstacleRadius + minDistanceFromObstacles);
+            }
+            if (tooClose) {
                 validPosition = false;
                 break;
             }
@@ -1471,22 +1557,33 @@ function render(currentTime) {
     drawObject(groundBuffer, mat4.identity(), viewMatrix, projectionMatrix);
 
     if (alternateMode) {
-        // Draw grid overlay on floor (raised slightly to avoid z-fighting with ground)
+        // Draw grid overlay on floor (raised very slightly to avoid z-fighting with ground)
         gl.lineWidth(2.0);
-        const gridMatrix = mat4.translate(0, 0.01, 0); // Raise grid very slightly above ground
+        const gridMatrix = mat4.translate(0, 0.001, 0); // Raise grid just barely above ground (0.001 units)
         drawObject(radarGridBuffer, gridMatrix, viewMatrix, projectionMatrix, gl.LINES);
         gl.lineWidth(1.0);
     }
 
-    // Draw obstacles
+    // Draw obstacles (including walls)
     gameState.obstacles.forEach(obstacle => {
-        const size = obstacle.size || 1.0;
-        const height = obstacle.height || 1.0;
-        const modelMatrix = mat4.multiply(
-            mat4.translate(obstacle.x, height / 2, obstacle.z),
-            mat4.scale(size, height, size)
-        );
-        drawObject(obstacleBuffer, modelMatrix, viewMatrix, projectionMatrix);
+        if (obstacle.type === 'wall') {
+            // Walls are drawn with wall buffer and rotation
+            const rotation = obstacle.rotation || 0;
+            const modelMatrix = mat4.multiply(
+                mat4.translate(obstacle.x, 0, obstacle.z),
+                mat4.rotateY(rotation)
+            );
+            drawObject(wallBuffer, modelMatrix, viewMatrix, projectionMatrix);
+        } else {
+            // Regular obstacles
+            const size = obstacle.size || 1.0;
+            const height = obstacle.height || 1.0;
+            const modelMatrix = mat4.multiply(
+                mat4.translate(obstacle.x, height / 2, obstacle.z),
+                mat4.scale(size, height, size)
+            );
+            drawObject(obstacleBuffer, modelMatrix, viewMatrix, projectionMatrix);
+        }
     });
 
     // Draw health pickups (only in alternate mode)
@@ -1662,13 +1759,24 @@ function render(currentTime) {
 
     // Draw obstacles on radar (scaled based on actual size)
     gameState.obstacles.forEach(obstacle => {
-        const size = obstacle.size || 1.0;
-        const radarScale = size * 2; // Scale for radar visibility
-        const modelMatrix = mat4.multiply(
-            mat4.translate(obstacle.x, 0.5, obstacle.z),
-            mat4.scale(radarScale, radarScale, radarScale)
-        );
-        drawObject(obstacleBuffer, modelMatrix, radarView, radarProjection);
+        if (obstacle.type === 'wall') {
+            // Draw walls on radar
+            const rotation = obstacle.rotation || 0;
+            const modelMatrix = mat4.multiply(
+                mat4.translate(obstacle.x, 0.5, obstacle.z),
+                mat4.rotateY(rotation)
+            );
+            drawObject(wallBuffer, modelMatrix, radarView, radarProjection);
+        } else {
+            // Draw regular obstacles on radar
+            const size = obstacle.size || 1.0;
+            const radarScale = size * 2; // Scale for radar visibility
+            const modelMatrix = mat4.multiply(
+                mat4.translate(obstacle.x, 0.5, obstacle.z),
+                mat4.scale(radarScale, radarScale, radarScale)
+            );
+            drawObject(obstacleBuffer, modelMatrix, radarView, radarProjection);
+        }
     });
 
     // Draw health pickups on radar (only in alternate mode)
@@ -1786,6 +1894,57 @@ function generateObstacles() {
     const minDistance = 8; // Minimum distance from player spawn (0,0) and from each other
 
     gameState.obstacles = [];
+
+    // Add boundary walls first (walls act as obstacles)
+    const arenaSize = 45;
+    const wallLength = 90;
+    const wallHeight = 5;
+    const wallThickness = 1;
+    const wallCollisionSize = wallLength / 2; // Walls span the full arena length
+
+    // North wall (positive Z)
+    gameState.obstacles.push({
+        x: 0,
+        z: arenaSize,
+        type: 'wall',
+        size: wallCollisionSize,
+        height: wallHeight,
+        thickness: wallThickness,
+        rotation: 0
+    });
+
+    // South wall (negative Z)
+    gameState.obstacles.push({
+        x: 0,
+        z: -arenaSize,
+        type: 'wall',
+        size: wallCollisionSize,
+        height: wallHeight,
+        thickness: wallThickness,
+        rotation: 0
+    });
+
+    // East wall (positive X)
+    gameState.obstacles.push({
+        x: arenaSize,
+        z: 0,
+        type: 'wall',
+        size: wallCollisionSize,
+        height: wallHeight,
+        thickness: wallThickness,
+        rotation: Math.PI / 2
+    });
+
+    // West wall (negative X)
+    gameState.obstacles.push({
+        x: -arenaSize,
+        z: 0,
+        type: 'wall',
+        size: wallCollisionSize,
+        height: wallHeight,
+        thickness: wallThickness,
+        rotation: Math.PI / 2
+    });
 
     for (let i = 0; i < numObstacles; i++) {
         let x, z;
