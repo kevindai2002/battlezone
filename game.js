@@ -26,8 +26,8 @@ const gameState = {
 // Geometry buffers
 let obstacleBuffer, enemyBuffer, groundBuffer, playerBuffer, playerRadarBuffer, enemyRadarBuffer;
 // Alternate mode tank buffers
-let tankBaseBuffer, tankTurretBuffer, tankArrowBuffer, movementArrowBuffer;
-let enemyTankBaseBuffer, enemyTankTurretBuffer; // Enemy tanks in tron red
+let tankBaseBuffer, tankTurretBuffer, tankCannonBuffer, tankArrowBuffer, movementArrowBuffer;
+let enemyTankBaseBuffer, enemyTankTurretBuffer, enemyTankCannonBuffer; // Enemy tanks in tron red
 // Alternate mode radar buffers
 let radarGridBuffer, radarPlayerArrowBuffer;
 // Shot buffer for alternate mode
@@ -368,6 +368,64 @@ function createTankTurret(color) {
     return { vertices, colors, count: vertices.length / 3 };
 }
 
+// Tank cannon: cylindrical barrel extending from turret
+function createTankCannon(color) {
+    const radius = 0.08;  // Thin barrel
+    const length = 1.2;   // Extends forward from turret
+    const segments = 12;  // Number of sides for cylinder
+    const baseY = 0.5;    // Height at center of turret
+    const startZ = 0.4;   // Start at front of turret
+
+    const vertices = [];
+
+    // Create cylinder using triangles
+    for (let i = 0; i < segments; i++) {
+        const angle1 = (i / segments) * Math.PI * 2;
+        const angle2 = ((i + 1) / segments) * Math.PI * 2;
+
+        const x1 = Math.cos(angle1) * radius;
+        const y1 = Math.sin(angle1) * radius;
+        const x2 = Math.cos(angle2) * radius;
+        const y2 = Math.sin(angle2) * radius;
+
+        // Side faces (two triangles per segment)
+        // Front triangle
+        vertices.push(
+            x1, baseY + y1, startZ,
+            x2, baseY + y2, startZ,
+            x1, baseY + y1, startZ + length
+        );
+
+        // Back triangle
+        vertices.push(
+            x2, baseY + y2, startZ,
+            x2, baseY + y2, startZ + length,
+            x1, baseY + y1, startZ + length
+        );
+
+        // Front cap (at barrel start)
+        vertices.push(
+            0, baseY, startZ,
+            x2, baseY + y2, startZ,
+            x1, baseY + y1, startZ
+        );
+
+        // Back cap (at barrel end)
+        vertices.push(
+            0, baseY, startZ + length,
+            x1, baseY + y1, startZ + length,
+            x2, baseY + y2, startZ + length
+        );
+    }
+
+    const colors = [];
+    for (let i = 0; i < vertices.length / 3; i++) {
+        colors.push(color[0], color[1], color[2]);
+    }
+
+    return { vertices, colors, count: vertices.length / 3 };
+}
+
 // Tank arrow: simple arrow pointing forward for debugging
 function createTankArrow(color) {
     const length = 0.8;
@@ -641,11 +699,13 @@ function initGeometry() {
         // Tank geometry for alternate mode - Player (tron blue)
         tankBaseBuffer = createBuffers(createTankBase([0, 0.5, 1])); // Tron blue base
         tankTurretBuffer = createBuffers(createTankTurret([0.3, 0.7, 1])); // Light tron blue turret
+        tankCannonBuffer = createBuffers(createTankCannon([0.2, 0.6, 0.9])); // Darker blue cannon
         tankArrowBuffer = createBuffers(createTankArrow([0, 0.8, 1])); // Bright blue arrow pointing forward (base direction)
         movementArrowBuffer = createBuffers(createMovementArrow([1, 0, 0])); // Red arrow pointing in movement direction
         // Enemy tank geometry (tron red)
         enemyTankBaseBuffer = createBuffers(createTankBase([1, 0, 0])); // Tron red base
         enemyTankTurretBuffer = createBuffers(createTankTurret([1, 0.3, 0.3])); // Light tron red turret
+        enemyTankCannonBuffer = createBuffers(createTankCannon([0.8, 0.2, 0.2])); // Darker red cannon
         // Radar geometry for alternate mode
         radarGridBuffer = createBuffers(createRadarGrid([0.8, 0.6, 1.0], 200, 5)); // More opaque purple grid lines - full floor size
         radarPlayerArrowBuffer = createBuffers(createRadarPlayerTriangle([0, 0.5, 1])); // Tron blue triangle for player on radar
@@ -1228,7 +1288,17 @@ function render(currentTime) {
                 )
             );
             drawObject(tankTurretBuffer, turretMatrix, viewMatrix, projectionMatrix);
-            
+
+            // Cannon (same rotation as turret)
+            const cannonMatrix = mat4.multiply(
+                mat4.translate(gameState.player.x, 0, gameState.player.z),
+                mat4.multiply(
+                    mat4.rotateY(gameState.player.turretAngle),
+                    mat4.scale(1.5, 1, 1.5)
+                )
+            );
+            drawObject(tankCannonBuffer, cannonMatrix, viewMatrix, projectionMatrix);
+
             // Yellow arrow pointing forward (base facing direction)
             const arrowMatrix = mat4.multiply(
                 mat4.translate(gameState.player.x, 0, gameState.player.z),
@@ -1284,6 +1354,16 @@ function render(currentTime) {
                 )
             );
             drawObject(enemyTankTurretBuffer, turretMatrix, viewMatrix, projectionMatrix);
+
+            // Cannon (same rotation as turret)
+            const cannonMatrix = mat4.multiply(
+                mat4.translate(enemy.x, 0, enemy.z),
+                mat4.multiply(
+                    mat4.rotateY(enemy.turretAngle),
+                    mat4.scale(1.5, 1, 1.5)
+                )
+            );
+            drawObject(enemyTankCannonBuffer, cannonMatrix, viewMatrix, projectionMatrix);
         });
     } else {
         // Normal mode: draw enemy tanks as pyramids
