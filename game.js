@@ -1279,7 +1279,7 @@ function updateShots(deltaTime) {
 
             if (alternateMode) {
                 // Alternate mode: health system with damage based on wave and lives
-                const damage = 30 + (gameState.wave - 1) * 10;
+                const damage = 30 + (gameState.wave - 1) * 1;
                 gameState.player.health -= damage;
                 if (gameState.player.health <= 0) {
                     // Player dies - lose a life
@@ -1307,16 +1307,48 @@ function updateShots(deltaTime) {
 
 // Spawn enemy at random edge
 function spawnEnemy() {
-    const edge = Math.floor(Math.random() * 4);
+    const minDistanceFromObstacles = 5; // Minimum distance from obstacles
+    const enemyRadius = 1.5;
     let x, z;
+    let validPosition = false;
+    let attempts = 0;
+    const maxAttempts = 50;
 
-    switch(edge) {
-        case 0: x = -45; z = (Math.random() - 0.5) * 80; break;
-        case 1: x = 45; z = (Math.random() - 0.5) * 80; break;
-        case 2: x = (Math.random() - 0.5) * 80; z = -45; break;
-        case 3: x = (Math.random() - 0.5) * 80; z = 45; break;
+    while (!validPosition && attempts < maxAttempts) {
+        // Pick random edge
+        const edge = Math.floor(Math.random() * 4);
+
+        switch(edge) {
+            case 0: x = -45; z = (Math.random() - 0.5) * 80; break;
+            case 1: x = 45; z = (Math.random() - 0.5) * 80; break;
+            case 2: x = (Math.random() - 0.5) * 80; z = -45; break;
+            case 3: x = (Math.random() - 0.5) * 80; z = 45; break;
+        }
+
+        // Check if position is clear of obstacles
+        validPosition = true;
+        for (const obstacle of gameState.obstacles) {
+            const obstacleRadius = (obstacle.size || 1.0) * 1.2;
+            if (checkCollision(x, z, obstacle.x, obstacle.z, enemyRadius, obstacleRadius + minDistanceFromObstacles)) {
+                validPosition = false;
+                break;
+            }
+        }
+
+        // Also check if not too close to other enemies
+        if (validPosition) {
+            for (const enemy of gameState.enemies) {
+                if (checkCollision(x, z, enemy.x, enemy.z, enemyRadius, enemyRadius + 3)) {
+                    validPosition = false;
+                    break;
+                }
+            }
+        }
+
+        attempts++;
     }
 
+    // If we found a valid position, spawn there. Otherwise spawn anyway (fallback)
     gameState.enemies.push({ x, z, angle: 0, turretAngle: 0, shootTimer: 3 + Math.random() * 2 });
 }
 
@@ -1992,6 +2024,14 @@ function init() {
 // Input handling
 window.addEventListener('keydown', (e) => {
     keys[e.key] = true;
+
+    // ESC key to instantly end game (only in alternate mode during gameplay)
+    if (e.key === 'Escape' && alternateMode && gameState.gameStarted && !gameState.gameOver) {
+        // Trigger game over
+        gameState.gameOver = true;
+        gameState.lives = 0;
+        updateHighScore(gameState.score);
+    }
 
     // Toggle alternate mode with '!'
     if (e.key === '!') {
