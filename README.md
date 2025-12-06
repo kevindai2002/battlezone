@@ -34,7 +34,7 @@ The game includes two modes:
 ### Normal Mode
 - Destroy enemy tanks by shooting them
 - Avoid enemy shots by moving
-- You cannot move through obstacles, walls, or enemy tanks
+- You cannot move through obstacles or enemy tanks
 - When destroyed, you respawn at the same location with temporary invulnerability
 - Enemy tanks spawn at random edge locations when destroyed
 
@@ -44,7 +44,6 @@ The game includes two modes:
 - **Wave System**: Progress through waves by destroying all enemies
 - **Score System**: Earn points for each kill (1 point × wave multiplier)
 - **Power-ups**: Collect hearts to heal +20 HP or boost max HP +20
-- **Arena Boundaries**: Walls surround the battlefield and act as obstacles
 - **Progressive Difficulty**: Each wave spawns more enemies with increased damage
 - **High Score**: Best score saved in browser localStorage
 
