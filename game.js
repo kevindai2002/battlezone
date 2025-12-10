@@ -34,14 +34,14 @@ const gameState = {
 };
 
 // Geometry buffers
-let obstacleBuffer, enemyBuffer, groundBuffer, playerBuffer, playerRadarBuffer, enemyRadarBuffer, wallBuffer;
+let obstacleBuffer, enemyBuffer, groundBuffer, playerBuffer, playerRadarBuffer, enemyRadarBuffer;
 // Alternate mode tank buffers
 let tankBaseBuffer, tankTurretBuffer, tankCannonBuffer, tankArrowBuffer, movementArrowBuffer;
 let enemyTankBaseBuffer, enemyTankTurretBuffer, enemyTankCannonBuffer; // Enemy tanks in tron red
 // Alternate mode radar buffers
 let radarGridBuffer, radarPlayerArrowBuffer;
-// Shot buffer for alternate mode
-let shotBuffer; // Yellow sphere for shots in alternate mode
+// Shot buffer and health pickup buffer for alternate mode
+let shotBuffer, heartBuffer;
 
 // Input state
 const keys = {};
@@ -60,6 +60,13 @@ const cameraRotateSpeed = 2.0; // Camera rotation speed with arrow keys
 
 // High score (persisted in localStorage)
 let highScore = 0;
+
+// Game constants
+const PLAYER_RADIUS = 1.5;
+const ENEMY_RADIUS = 1.5;
+const SHOT_RADIUS = 0.5;
+const PICKUP_RADIUS = 0.8;
+const OBSTACLE_COLLISION_MULTIPLIER = 1.2;
 
 // UI elements
 let countdownElement;
@@ -337,37 +344,6 @@ function createHeart(color) {
         -0.3, 0, 0.3,   0.3, 0, 0.3,   0, -0.5, 0,
         // Bottom back
         0.3, 0, -0.3,   -0.3, 0, -0.3,   0, -0.5, 0
-    ];
-
-    const colors = [];
-    for (let i = 0; i < vertices.length / 3; i++) {
-        colors.push(color[0], color[1], color[2]);
-    }
-
-    return { vertices, colors, count: vertices.length / 3 };
-}
-
-// Create a wall segment (tall box)
-function createWall(length, height, thickness, color) {
-    const vertices = [
-        // Front face
-        -length/2, 0, thickness/2,  length/2, 0, thickness/2,  length/2, height, thickness/2,
-        -length/2, 0, thickness/2,  length/2, height, thickness/2, -length/2, height, thickness/2,
-        // Back face
-        -length/2, 0, -thickness/2, -length/2, height, -thickness/2,  length/2, height, -thickness/2,
-        -length/2, 0, -thickness/2,  length/2, height, -thickness/2,  length/2, 0, -thickness/2,
-        // Top face
-        -length/2, height, -thickness/2, -length/2, height, thickness/2,  length/2, height, thickness/2,
-        -length/2, height, -thickness/2,  length/2, height, thickness/2,  length/2, height, -thickness/2,
-        // Bottom face
-        -length/2, 0, -thickness/2,  length/2, 0, -thickness/2,  length/2, 0, thickness/2,
-        -length/2, 0, -thickness/2,  length/2, 0, thickness/2, -length/2, 0, thickness/2,
-        // Right face
-         length/2, 0, -thickness/2,  length/2, height, -thickness/2,  length/2, height, thickness/2,
-         length/2, 0, -thickness/2,  length/2, height, thickness/2,  length/2, 0, thickness/2,
-        // Left face
-        -length/2, 0, -thickness/2, -length/2, 0, thickness/2, -length/2, height, thickness/2,
-        -length/2, 0, -thickness/2, -length/2, height, thickness/2, -length/2, height, -thickness/2
     ];
 
     const colors = [];
@@ -793,8 +769,6 @@ function initGeometry() {
         radarPlayerArrowBuffer = createBuffers(createRadarPlayerTriangle([0, 0.5, 1])); // Tron blue triangle for player on radar
         // Shot geometry for alternate mode
         shotBuffer = createBuffers(createSphere([1, 1, 0])); // Yellow shots
-        // Wall geometry for alternate mode
-        wallBuffer = createBuffers(createWall(90, 5, 1, [0.3, 0.0, 0.5])); // Purple walls
         // Health pickup geometry for alternate mode
         heartBuffer = createBuffers(createHeart([1, 0, 1])); // Magenta hearts
     } else {
@@ -805,8 +779,6 @@ function initGeometry() {
         playerRadarBuffer = createBuffers(createPyramid([0.6, 0.85, 1.0])); // Carolina blue player radar icon
         enemyRadarBuffer = createBuffers(createPyramid([1, 0, 0])); // Red enemy radar icon
         groundBuffer = createBuffers(createGround(200, [0.2, 0.2, 0.2])); // Gray - extended size
-        // Wall geometry for normal mode
-        wallBuffer = createBuffers(createWall(90, 5, 1, [0.4, 0.4, 0.4])); // Gray walls
         // Health pickup geometry for normal mode
         heartBuffer = createBuffers(createHeart([1, 0, 0.5])); // Pink hearts
     }
@@ -844,7 +816,7 @@ function updateEnemies(deltaTime) {
             const distToObstacle = Math.sqrt(dx * dx + dz * dz);
 
             // Check if obstacle is directly ahead
-            if (checkCollision(lookAheadX, lookAheadZ, obstacle.x, obstacle.z, 1.5, obstacleRadius)) {
+            if (checkCollision(lookAheadX, lookAheadZ, obstacle.x, obstacle.z, ENEMY_RADIUS, obstacleRadius)) {
                 obstacleAhead = true;
                 // Determine which way to turn to avoid
                 const obstacleAngle = Math.atan2(dx, dz);
@@ -928,8 +900,8 @@ function updateEnemies(deltaTime) {
         // Check obstacles
         if (!collided) {
             for (const obstacle of gameState.obstacles) {
-                const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
-                if (checkCollision(newX, newZ, obstacle.x, obstacle.z, 1.5, obstacleRadius)) {
+                const obstacleRadius = (obstacle.size || 1.0) * OBSTACLE_COLLISION_MULTIPLIER;
+                if (checkCollision(newX, newZ, obstacle.x, obstacle.z, ENEMY_RADIUS, obstacleRadius)) {
                     collided = true;
                     break;
                 }
@@ -939,7 +911,7 @@ function updateEnemies(deltaTime) {
         // Check other enemies
         if (!collided) {
             for (const other of gameState.enemies) {
-                if (other !== enemy && checkCollision(newX, newZ, other.x, other.z, 1.5, 1.5)) {
+                if (other !== enemy && checkCollision(newX, newZ, other.x, other.z, ENEMY_RADIUS, ENEMY_RADIUS)) {
                     collided = true;
                     break;
                 }
@@ -947,7 +919,7 @@ function updateEnemies(deltaTime) {
         }
 
         // Check player
-        if (!collided && checkCollision(newX, newZ, gameState.player.x, gameState.player.z, 1.5, 1.5)) {
+        if (!collided && checkCollision(newX, newZ, gameState.player.x, gameState.player.z, ENEMY_RADIUS, PLAYER_RADIUS)) {
             collided = true;
         }
 
@@ -959,17 +931,16 @@ function updateEnemies(deltaTime) {
 
         // Handle shooting - only shoot at player if they're alive
         if (!gameState.player.dead) {
-            // Update turret angle to always track player
+            // Calculate direction to player
             const dx = gameState.player.x - enemy.x;
             const dz = gameState.player.z - enemy.z;
-            enemy.turretAngle = Math.atan2(dx, dz);
+            const angleToPlayer = Math.atan2(dx, dz);
+
+            // Update turret angle to always track player
+            enemy.turretAngle = angleToPlayer;
 
             enemy.shootTimer -= deltaTime;
             if (enemy.shootTimer <= 0) {
-                // Calculate angle to player for shooting
-                const dx = gameState.player.x - enemy.x;
-                const dz = gameState.player.z - enemy.z;
-                const angleToPlayer = Math.atan2(dx, dz);
                 gameState.enemyShots.push({
                     x: enemy.x,
                     z: enemy.z,
@@ -1045,7 +1016,7 @@ function updatePlayer(deltaTime) {
         let collided = false;
         if (!collided) {
             for (const obstacle of gameState.obstacles) {
-                const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+                const obstacleRadius = (obstacle.size || 1.0) * OBSTACLE_COLLISION_MULTIPLIER;
                 if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, obstacleRadius)) {
                     collided = true;
                     break;
@@ -1056,7 +1027,7 @@ function updatePlayer(deltaTime) {
         // Check collisions with enemies
         if (!collided) {
             for (const enemy of gameState.enemies) {
-                if (checkCollision(newX, newZ, enemy.x, enemy.z, playerRadius, 1.5)) {
+                if (checkCollision(newX, newZ, enemy.x, enemy.z, playerRadius, ENEMY_RADIUS)) {
                     collided = true;
                     break;
                 }
@@ -1111,7 +1082,7 @@ function updatePlayer(deltaTime) {
         let collided = false;
         if (!collided) {
             for (const obstacle of gameState.obstacles) {
-                const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
+                const obstacleRadius = (obstacle.size || 1.0) * OBSTACLE_COLLISION_MULTIPLIER;
                 if (checkCollision(newX, newZ, obstacle.x, obstacle.z, playerRadius, obstacleRadius)) {
                     collided = true;
                     break;
@@ -1122,7 +1093,7 @@ function updatePlayer(deltaTime) {
         // Check collisions with enemies
         if (!collided) {
             for (const enemy of gameState.enemies) {
-                if (checkCollision(newX, newZ, enemy.x, enemy.z, playerRadius, 1.5)) {
+                if (checkCollision(newX, newZ, enemy.x, enemy.z, playerRadius, ENEMY_RADIUS)) {
                     collided = true;
                     break;
                 }
@@ -1162,8 +1133,7 @@ function updatePlayer(deltaTime) {
     if (alternateMode) {
         for (let i = gameState.healthPickups.length - 1; i >= 0; i--) {
             const pickup = gameState.healthPickups[i];
-            const pickupRadius = 0.8; // Collision radius for heart
-            if (checkCollision(gameState.player.x, gameState.player.z, pickup.x, pickup.z, 1.5, pickupRadius)) {
+            if (checkCollision(gameState.player.x, gameState.player.z, pickup.x, pickup.z, PLAYER_RADIUS, PICKUP_RADIUS)) {
                 // Remove the pickup
                 gameState.healthPickups.splice(i, 1);
 
@@ -1186,7 +1156,6 @@ function updatePlayer(deltaTime) {
 
 // Update shots
 function updateShots(deltaTime) {
-    const shotRadius = 0.5;
     const fieldSize = 200; // Extended to match larger floor
 
     // Update player shot
@@ -1206,8 +1175,8 @@ function updateShots(deltaTime) {
         } else {
             // Check collision with obstacles
             for (const obstacle of gameState.obstacles) {
-                const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
-                if (checkCollision(gameState.playerShot.x, gameState.playerShot.z, obstacle.x, obstacle.z, shotRadius, obstacleRadius)) {
+                const obstacleRadius = (obstacle.size || 1.0) * OBSTACLE_COLLISION_MULTIPLIER;
+                if (checkCollision(gameState.playerShot.x, gameState.playerShot.z, obstacle.x, obstacle.z, SHOT_RADIUS, obstacleRadius)) {
                     gameState.playerShot = null;
                     break;
                 }
@@ -1217,7 +1186,7 @@ function updateShots(deltaTime) {
             if (gameState.playerShot) {
                 for (let i = gameState.enemies.length - 1; i >= 0; i--) {
                     const enemy = gameState.enemies[i];
-                    if (checkCollision(gameState.playerShot.x, gameState.playerShot.z, enemy.x, enemy.z, shotRadius, 1.5)) {
+                    if (checkCollision(gameState.playerShot.x, gameState.playerShot.z, enemy.x, enemy.z, SHOT_RADIUS, ENEMY_RADIUS)) {
                         gameState.playerShot = null;
                         gameState.enemies.splice(i, 1);
 
@@ -1269,7 +1238,7 @@ function updateShots(deltaTime) {
         let hitObstacle = false;
         for (const obstacle of gameState.obstacles) {
             const obstacleRadius = (obstacle.size || 1.0) * 1.2; // Use obstacle size for collision
-            if (checkCollision(shot.x, shot.z, obstacle.x, obstacle.z, shotRadius, obstacleRadius)) {
+            if (checkCollision(shot.x, shot.z, obstacle.x, obstacle.z, SHOT_RADIUS, obstacleRadius)) {
                 gameState.enemyShots.splice(i, 1);
                 hitObstacle = true;
                 break;
@@ -1280,7 +1249,7 @@ function updateShots(deltaTime) {
 
         // Check collision with player
         if (!gameState.player.invulnerable && !gameState.player.dead &&
-            checkCollision(shot.x, shot.z, gameState.player.x, gameState.player.z, shotRadius, 1.5)) {
+            checkCollision(shot.x, shot.z, gameState.player.x, gameState.player.z, SHOT_RADIUS, PLAYER_RADIUS)) {
             gameState.enemyShots.splice(i, 1);
 
             if (alternateMode) {
